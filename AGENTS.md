@@ -115,3 +115,27 @@ These guidelines bias toward caution over speed. For trivial tasks, use judgment
 * Transform tasks into verifiable goals (e.g., write/run tests to reproduce/verify).
 * For multi-step tasks, state a brief plan with verification steps.
 
+---
+
+## 7. 🤖 Tmux-Based Multi-Agent Workflow Protocol
+
+To maintain modular development and strict review separation, the workspace operates under a multi-agent orchestration architecture utilizing named `tmux` sessions:
+
+### 7.1 Agent Roles & Responsibilities
+1. **Codex (`worldcup_hackathon_codex`) — Planner & Reviewer**:
+   * **Scope**: Evaluates requirements, drafts scoped task specifications with acceptance criteria & test cases, and performs final code/test reviews.
+   * **Outputs**:
+     * Task Specifications: Saved under `.agents/communication/task_specifications/`.
+     * Code & Test Reviews: Saved under `.agents/communication/reviews/` (returning `APPROVE`, `REQUEST_CHANGES`, or `ESCALATE`).
+
+2. **Agy (`worldcup_hackathon_agy`) — Implementer & Test Runner**:
+   * **Scope**: Sole authorized code writer on the shared repository branch (`master`). Implements tasks according to specifications, runs tests, and logs execution evidence.
+   * **Outputs**:
+     * Source Code Edits & Commits: Signed commits following standard conventions.
+     * Execution Evidence: Saved under `.agents/communication/execution_logs/`.
+
+### 7.2 Inter-Agent Communication Rules
+* **Notification Mechanism**: Use `tmux send-keys` **only** to wake or notify the counterpart agent session (e.g. `tmux send-keys -t worldcup_hackathon_codex "..." Enter`). Never pass raw source code payloads through `tmux send-keys`.
+* **Authoritative Persistence**: All task specifications, results, reviews, and logs MUST be stored as persistent markdown/json files under `.agents/communication/`.
+* **Single-Writer Rule**: Only one writing agent (Agy) makes code changes to the repository at a time to prevent merge conflicts and state divergence.
+
