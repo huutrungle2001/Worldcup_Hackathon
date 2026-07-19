@@ -1,54 +1,230 @@
 process.env.TEST_MODE = "true";
 
-import { normalizeScoreEvent, normalizeOddsUpdate } from "../src/domain/types";
+import {
+  normalizeFixture,
+  normalizeScoreEvent,
+  normalizeOddsUpdate,
+} from "../src/domain/types";
 import { Logger } from "../src/utils/logger";
 import { marketManager } from "../src/agent/market";
 import { RiskAgent } from "../src/agent/risk";
 import { logger } from "../src/utils/logger";
 
-function testNormalization() {
-  logger.info("Running normalization tests...");
+function testFixtureNormalization() {
+  logger.info("Running fixture normalization tests...");
 
-  // 1. Lowercase/Uppercase property mapping
-  const scoreRaw1 = {
-    FixtureId: 101,
-    Seq: 5,
-    Action: "Goal",
-    Stats: { "1": 1, "2": 0 },
+  // Test 1: Real-shape fixture with Participant1, Participant2, Competition, StartTime
+  const rawFixture = {
+    FixtureId: 123,
+    Participant1: "Team A",
+    Participant2: "Team B",
+    Competition: "World Cup 2026",
+    CompetitionId: 456,
+    StartTime: 1790348400000,
+    Ts: 1790340000000,
   };
-  const scoreRaw2 = {
+
+  const norm = normalizeFixture(rawFixture);
+  if (norm.fixtureId !== 123) {
+    throw new Error(`Expected fixtureId 123, got ${norm.fixtureId}`);
+  }
+  if (norm.participantOneName !== "Team A") {
+    throw new Error(
+      `Expected Participant1 "Team A", got "${norm.participantOneName}"`
+    );
+  }
+  if (norm.participantTwoName !== "Team B") {
+    throw new Error(
+      `Expected Participant2 "Team B", got "${norm.participantTwoName}"`
+    );
+  }
+  if (norm.competitionName !== "World Cup 2026") {
+    throw new Error(
+      `Expected Competition "World Cup 2026", got "${norm.competitionName}"`
+    );
+  }
+  if (norm.startTime !== new Date(1790348400000).toISOString()) {
+    throw new Error(`StartTime ISO mismatch: got ${norm.startTime}`);
+  }
+
+  // Test 1b: Missing or invalid StartTime throws error
+  try {
+    normalizeFixture({ FixtureId: 123, Participant1: "A", Participant2: "B" });
+    throw new Error("Should have rejected missing StartTime");
+  } catch (err: any) {
+    if (!err.message.includes("StartTime")) throw err;
+  }
+
+  logger.info("✓ Fixture normalization tests passed.");
+}
+
+function testScoreNormalization() {
+  logger.info("Running score normalization tests...");
+
+  // Test 2: Real-shape goal record with Stats["1"] = 1, Stats["2"] = 0, Participant = 1
+  const rawScore = {
+    FixtureId: 123,
+    Seq: 10,
+    Ts: 1790348500000,
+    Action: "goal",
+    Participant: 1,
+    StatusId: 2,
+    GameState: "scheduled",
+    Stats: {
+      "1": 1,
+      "2": 0,
+    },
+  };
+
+  const norm = normalizeScoreEvent(rawScore);
+  if (norm.fixtureId !== 123) throw new Error("FixtureId mismatch");
+  if (norm.seq !== 10) throw new Error("Seq mismatch");
+  if (norm.scoreOne !== 1 || norm.scoreTwo !== 0) {
+    throw new Error(
+      `Expected score 1-0, got ${norm.scoreOne}-${norm.scoreTwo}`
+    );
+  }
+  if (norm.participantId !== 1) throw new Error("ParticipantId mismatch");
+  if (norm.ts !== 1790348500000) throw new Error("Timestamp mismatch");
+  if (norm.statusId !== 2) throw new Error("StatusId mismatch");
+  if (norm.eventKey !== "123:10:goal") throw new Error("EventKey mismatch");
+
+  // Test 3: Lowercase / synthetic score aliases
+  const rawSynthetic = {
     fixtureId: 101,
     seq: 5,
+    ts: 10000,
     action: "Goal",
-    stats: { "1": 1, "2": 0 },
+    scoreOne: 2,
+    scoreTwo: 1,
   };
-
-  const norm1 = normalizeScoreEvent(scoreRaw1);
-  const norm2 = normalizeScoreEvent(scoreRaw2);
-
-  if (norm1.fixtureId !== 101 || norm1.seq !== 5 || norm1.scoreOne !== 1) {
-    throw new Error("Failed to normalize uppercase score keys");
-  }
-  if (norm2.fixtureId !== 101 || norm2.seq !== 5 || norm2.scoreOne !== 1) {
-    throw new Error("Failed to normalize lowercase score keys");
+  const normSynth = normalizeScoreEvent(rawSynthetic);
+  if (normSynth.scoreOne !== 2 || normSynth.scoreTwo !== 1) {
+    throw new Error(
+      `Synthetic score alias failed: got ${normSynth.scoreOne}-${normSynth.scoreTwo}`
+    );
   }
 
-  // 2. Invalid sequences
+  // Test 4: Missing or zero score sequence rejected
   try {
-    normalizeScoreEvent({ fixtureId: 101, seq: 0 });
+    normalizeScoreEvent({ FixtureId: 123, Seq: 0, Ts: 10000 });
     throw new Error("Should have rejected zero sequence");
   } catch (err: any) {
-    if (!err.message.includes("sequence")) {
-      throw err;
-    }
+    if (!err.message.includes("sequence")) throw err;
   }
 
-  // 3. Stable deduplication key
-  if (norm1.eventKey !== "101:5:Goal") {
-    throw new Error(`Deduplication key mismatch: ${norm1.eventKey}`);
+  // Test 5: Missing score timestamp rejected
+  try {
+    normalizeScoreEvent({ FixtureId: 123, Seq: 5 });
+    throw new Error("Should have rejected missing timestamp");
+  } catch (err: any) {
+    if (!err.message.includes("timestamp")) throw err;
   }
 
-  logger.info("✓ Normalization tests passed.");
+  logger.info("✓ Score normalization tests passed.");
+}
+
+function testOddsNormalization() {
+  logger.info("Running odds normalization & routing tests...");
+
+  // Test 6: Actual-shape full-match 1X2 odds message
+  const rawOdds = {
+    FixtureId: 123,
+    MessageId: "synthetic-msg-123",
+    Ts: 1790348501000,
+    SuperOddsType: "1X2_PARTICIPANT_RESULT",
+    PriceNames: ["part1", "draw", "part2"],
+    Prices: [2000, 3000, 4000],
+  };
+
+  const norm = normalizeOddsUpdate(rawOdds);
+  if (!norm) throw new Error("Expected non-null normalized odds");
+  if (
+    norm.oddsOne !== 2000 ||
+    norm.oddsDraw !== 3000 ||
+    norm.oddsTwo !== 4000
+  ) {
+    throw new Error(
+      `Odds price mismatch: got ${norm.oddsOne}/${norm.oddsDraw}/${norm.oddsTwo}`
+    );
+  }
+  if (norm.messageId !== "synthetic-msg-123")
+    throw new Error("MessageId mismatch");
+  if (norm.ts !== 1790348501000) throw new Error("Odds TS mismatch");
+
+  // Test 7: Shuffled PriceNames still map correctly
+  const rawShuffled = {
+    FixtureId: 123,
+    Ts: 1790348501000,
+    SuperOddsType: "1X2_PARTICIPANT_RESULT",
+    PriceNames: ["draw", "part2", "part1"],
+    Prices: [3100, 4100, 2100],
+  };
+  const normShuffled = normalizeOddsUpdate(rawShuffled);
+  if (!normShuffled) throw new Error("Expected non-null shuffled odds");
+  if (
+    normShuffled.oddsOne !== 2100 ||
+    normShuffled.oddsDraw !== 3100 ||
+    normShuffled.oddsTwo !== 4100
+  ) {
+    throw new Error(
+      `Shuffled odds mismatch: got ${normShuffled.oddsOne}/${normShuffled.oddsDraw}/${normShuffled.oddsTwo}`
+    );
+  }
+
+  // Test 8: Handicap or over/under message is ignored (returns null)
+  const rawOverUnder = {
+    FixtureId: 123,
+    Ts: 1790348501000,
+    SuperOddsType: "OVER_UNDER_GOALS",
+    PriceNames: ["over", "under"],
+    Prices: [1800, 2000],
+  };
+  if (normalizeOddsUpdate(rawOverUnder) !== null) {
+    throw new Error("Handicap/Over-Under market should return null");
+  }
+
+  // Test 9: Extra-time or other non-full-match 1X2 message is ignored (returns null)
+  const rawExtraTime = {
+    FixtureId: 123,
+    Ts: 1790348501000,
+    SuperOddsType: "1X2_PARTICIPANT_RESULT",
+    MarketPeriod: "ET1",
+    PriceNames: ["part1", "draw", "part2"],
+    Prices: [2000, 3000, 4000],
+  };
+  if (normalizeOddsUpdate(rawExtraTime) !== null) {
+    throw new Error("Extra-time market should return null");
+  }
+
+  // Test 10: Missing, zero, negative, or non-finite 1X2 prices are rejected
+  try {
+    normalizeOddsUpdate({
+      FixtureId: 123,
+      Ts: 1790348501000,
+      SuperOddsType: "1X2_PARTICIPANT_RESULT",
+      PriceNames: ["part1", "draw", "part2"],
+      Prices: [0, 3000, 4000],
+    });
+    throw new Error("Should have rejected zero price");
+  } catch (err: any) {
+    if (!err.message.includes("prices")) throw err;
+  }
+
+  try {
+    normalizeOddsUpdate({
+      FixtureId: 123,
+      Ts: 1790348501000,
+      SuperOddsType: "1X2_PARTICIPANT_RESULT",
+      PriceNames: ["part1", "draw", "part2"],
+      Prices: [-100, 3000, 4000],
+    });
+    throw new Error("Should have rejected negative price");
+  } catch (err: any) {
+    if (!err.message.includes("prices")) throw err;
+  }
+
+  logger.info("✓ Odds normalization & routing tests passed.");
 }
 
 function testLogRedaction() {
@@ -57,7 +233,6 @@ function testLogRedaction() {
   const testLogger = new Logger();
   let output = "";
 
-  // Temporarily redirect console.log to inspect output
   const originalLog = console.log;
   console.log = (msg: string) => {
     output = msg;
@@ -94,18 +269,15 @@ function testStateTransitions() {
   const fixtureId = 555;
   const market = marketManager.getOrCreateMarket(fixtureId);
 
-  // Initial OPEN
   if ((market.state as string) !== "OPEN") {
     throw new Error(`Expected OPEN state, got ${market.state}`);
   }
 
-  // Transition to HALTED
   marketManager.transitionTo(market, "HALTED", "TEST_HALT");
   if ((market.state as string) !== "HALTED" || !market.haltedAt) {
     throw new Error(`Expected HALTED state, got ${market.state}`);
   }
 
-  // Idempotent transition check (should return false and not add new audit logs)
   const lenBefore = market.auditTrail.length;
   const result = marketManager.transitionTo(market, "HALTED", "TEST_HALT");
   if (result || market.auditTrail.length !== lenBefore) {
@@ -118,7 +290,6 @@ function testStateTransitions() {
 function testRiskAgentRacePaths() {
   logger.info("Running RiskAgent race path and verification binding tests...");
 
-  // Reset/clean market
   const fixtureId = 999;
   const riskAgent = new RiskAgent();
   const market = marketManager.getOrCreateMarket(fixtureId);
@@ -132,7 +303,6 @@ function testRiskAgentRacePaths() {
   m.oddsDraw = 3000;
   m.oddsTwo = 5000;
 
-  // 1. Goal Event - Halts market
   const goalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 10,
@@ -149,7 +319,6 @@ function testRiskAgentRacePaths() {
     throw new Error("Halt sequence and type not bound correctly");
   }
 
-  // 2. Finding 6: Normal post-goal event (e.g. card) advances lastScoreSeq but does not break reopening
   const cardEvent = normalizeScoreEvent({
     fixtureId,
     seq: 11,
@@ -168,7 +337,6 @@ function testRiskAgentRacePaths() {
     );
   }
 
-  // 3. Finding 5: Unrelated odds are ignored
   const extraOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 12,
@@ -177,12 +345,13 @@ function testRiskAgentRacePaths() {
     PriceNames: ["over", "under"],
     Prices: [1800, 2000],
   });
-  riskAgent.handleOddsUpdate(extraOdds);
+  if (extraOdds !== null) {
+    riskAgent.handleOddsUpdate(extraOdds);
+  }
   if (m.state !== "HALTED") {
     throw new Error("Market reopened by unrelated odds type");
   }
 
-  // 4. Verify original goal proof success
   const goalProvedStats = [{ key: 1, value: 1, period: 0 }];
   riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
 
@@ -190,21 +359,19 @@ function testRiskAgentRacePaths() {
     throw new Error(`Expected PROOF_PENDING state, got ${m.state}`);
   }
 
-  // 5. Finding 5: Stale odds (Odds TS <= Goal TS) do not reopen
   const staleOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 13,
-    ts: 100000, // Equal to goal event TS
+    ts: 100000,
     super_odds_type: "1X2_PARTICIPANT_RESULT",
     PriceNames: ["part1", "draw", "part2"],
     Prices: [1400, 3200, 6000],
-  });
+  })!;
   riskAgent.handleOddsUpdate(staleOdds);
   if (m.state !== "PROOF_PENDING") {
     throw new Error("Market reopened by stale odds");
   }
 
-  // 6. Fresh odds (Odds TS > Goal TS) reopens market
   const freshOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 14,
@@ -212,13 +379,12 @@ function testRiskAgentRacePaths() {
     super_odds_type: "1X2_PARTICIPANT_RESULT",
     PriceNames: ["part1", "draw", "part2"],
     Prices: [1450, 3100, 5800],
-  });
+  })!;
   riskAgent.handleOddsUpdate(freshOdds);
   if (m.state !== "OPEN") {
     throw new Error(`Expected market to reopen, got state: ${m.state}`);
   }
 
-  // 7. Finalisation Event - Transitions to FINAL_PROOF_PENDING
   const finalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 20,
@@ -226,7 +392,7 @@ function testRiskAgentRacePaths() {
     action: "game_finalised",
     statusId: 100,
     period: 100,
-    stats: { "1": 2, "2": 1 }, // Final Score 2-1
+    stats: { "1": 2, "2": 1 },
   });
   riskAgent.handleScoreEvent(finalEvent);
 
@@ -240,14 +406,11 @@ function testRiskAgentRacePaths() {
     throw new Error("Finalisation sequence/type not bound correctly");
   }
 
-  // 8. Finding 2: Delayed old goal proof (seq 10) completing after finalisation began does not settle the market
   riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
   if (m.state !== "FINAL_PROOF_PENDING") {
     throw new Error("Delayed old proof settled the final market");
   }
 
-  // 9. Finding 3: Settle the market using proved goals (total goals 2-1), verifying winner calculation
-  // Let's modify the raw stream scores to be tampered (e.g. 0-0) to prove it uses verified stats!
   m.scoreOne = 0;
   m.scoreTwo = 0;
 
@@ -271,7 +434,9 @@ function testRiskAgentRacePaths() {
 
 function runAll() {
   logger.info("=== Starting Unit & Race Tests ===");
-  testNormalization();
+  testFixtureNormalization();
+  testScoreNormalization();
+  testOddsNormalization();
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();

@@ -43,7 +43,9 @@ async function main() {
     try {
       if (data && (data.FixtureId || data.fixtureId)) {
         const normalized = normalizeOddsUpdate(data);
-        riskAgent.handleOddsUpdate(normalized);
+        if (normalized) {
+          riskAgent.handleOddsUpdate(normalized);
+        }
       }
     } catch (err: any) {
       logger.error("Error processing odds stream event:", err, { event, data });

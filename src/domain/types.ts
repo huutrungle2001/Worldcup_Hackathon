@@ -15,7 +15,7 @@ export interface NormalizedScoreEvent {
   fixtureId: number;
   seq: number;
   ts: number;
-  gameState: number;
+  gameState: number | string;
   period: number;
   statusId: number;
   action: string;
@@ -36,67 +36,166 @@ export interface NormalizedOddsUpdate {
   oddsDraw: number;
   oddsTwo: number;
   oddsType: string;
+  messageId?: string;
   ingestedAt: string;
 }
 
 export function normalizeFixture(raw: any): NormalizedFixture {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid raw fixture object");
+  }
+
+  const rawFixtureId = raw.fixtureId ?? raw.FixtureId;
+  const fixtureId = Number(rawFixtureId);
+  if (
+    rawFixtureId === undefined ||
+    rawFixtureId === null ||
+    !Number.isFinite(fixtureId) ||
+    fixtureId <= 0 ||
+    !Number.isInteger(fixtureId)
+  ) {
+    throw new Error(`Invalid fixture ID: ${rawFixtureId}`);
+  }
+
+  const participantOneName =
+    raw.Participant1 ?? raw.participantOneName ?? raw.ParticipantOneName ?? "";
+  const participantTwoName =
+    raw.Participant2 ?? raw.participantTwoName ?? raw.ParticipantTwoName ?? "";
+
+  const competitionName =
+    raw.Competition ?? raw.competitionName ?? raw.CompetitionName ?? "";
+
+  const rawStartTime = raw.startTime ?? raw.StartTime;
+  if (rawStartTime === undefined || rawStartTime === null) {
+    throw new Error(`Missing or invalid StartTime: ${rawStartTime}`);
+  }
+
+  let startTimeIso: string;
+  if (
+    typeof rawStartTime === "number" &&
+    Number.isFinite(rawStartTime) &&
+    rawStartTime > 0
+  ) {
+    startTimeIso = new Date(rawStartTime).toISOString();
+  } else if (
+    typeof rawStartTime === "string" &&
+    rawStartTime.trim() !== "" &&
+    !isNaN(Date.parse(rawStartTime))
+  ) {
+    startTimeIso = new Date(rawStartTime).toISOString();
+  } else {
+    throw new Error(`Invalid StartTime format: ${rawStartTime}`);
+  }
+
+  const rawGameState =
+    raw.gameStateId ?? raw.GameStateId ?? raw.gameState ?? raw.GameState ?? 1;
+  const gameStateId = Number(rawGameState);
+
   return {
-    fixtureId: Number(raw.fixtureId ?? raw.FixtureId),
-    participantOneName:
-      raw.Participant1 ??
-      raw.participantOneName ??
-      raw.ParticipantOneName ??
-      "",
-    participantTwoName:
-      raw.Participant2 ??
-      raw.participantTwoName ??
-      raw.ParticipantTwoName ??
-      "",
-    gameStateId: Number(raw.gameState ?? raw.GameState ?? 1),
+    fixtureId,
+    participantOneName,
+    participantTwoName,
+    gameStateId: Number.isFinite(gameStateId) ? gameStateId : 1,
     gameStateName: raw.gameStateName ?? raw.GameStateName ?? "Scheduled",
     sportId: Number(raw.sportId ?? raw.SportId ?? 1),
     sportName: raw.sportName ?? raw.SportName ?? "Soccer",
     competitionId: Number(raw.competitionId ?? raw.CompetitionId ?? 0),
-    competitionName: raw.competitionName ?? raw.CompetitionName ?? "",
-    startTime: raw.startTime ?? raw.StartTime ?? new Date().toISOString(),
+    competitionName,
+    startTime: startTimeIso,
   };
 }
 
 export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
-  const fixtureId = Number(raw.fixtureId ?? raw.FixtureId);
-  const seq = Number(raw.seq ?? raw.Seq);
-
-  if (isNaN(fixtureId) || fixtureId <= 0) {
-    throw new Error(`Invalid fixture ID: ${raw.fixtureId}`);
-  }
-  if (isNaN(seq) || seq <= 0) {
-    throw new Error(`Invalid or missing score sequence: ${raw.seq}`);
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid raw score event object");
   }
 
-  const action = raw.action ?? raw.Action ?? "";
+  const rawFixtureId = raw.fixtureId ?? raw.FixtureId;
+  const fixtureId = Number(rawFixtureId);
+  if (
+    rawFixtureId === undefined ||
+    rawFixtureId === null ||
+    !Number.isFinite(fixtureId) ||
+    fixtureId <= 0 ||
+    !Number.isInteger(fixtureId)
+  ) {
+    throw new Error(`Invalid fixture ID: ${rawFixtureId}`);
+  }
+
+  const rawSeq = raw.seq ?? raw.Seq;
+  const seq = Number(rawSeq);
+  if (
+    rawSeq === undefined ||
+    rawSeq === null ||
+    !Number.isFinite(seq) ||
+    seq <= 0 ||
+    !Number.isInteger(seq)
+  ) {
+    throw new Error(`Invalid or missing score sequence: ${rawSeq}`);
+  }
+
+  const rawTs = raw.ts ?? raw.Ts;
+  const ts = Number(rawTs);
+  if (
+    rawTs === undefined ||
+    rawTs === null ||
+    !Number.isFinite(ts) ||
+    ts <= 0
+  ) {
+    throw new Error(`Invalid or missing score timestamp: ${rawTs}`);
+  }
+
+  const action = String(raw.action ?? raw.Action ?? "");
   const eventKey = `${fixtureId}:${seq}:${action}`;
 
-  // Robustly extract goals from Stats dictionary (Finding 1)
+  // Read score totals from Stats dictionary or direct fields
   const stats = raw.Stats ?? raw.stats ?? {};
-  const getStatValue = (key: string): number => {
+  const getStatValue = (key: string): number | undefined => {
     const entry = stats[key];
-    if (entry === undefined || entry === null) return 0;
+    if (entry === undefined || entry === null) return undefined;
     if (typeof entry === "object") {
-      return Number(entry.value ?? entry.Value ?? 0);
+      const val = entry.value ?? entry.Value;
+      return val !== undefined ? Number(val) : undefined;
     }
     return Number(entry);
   };
 
+  const stat1 = getStatValue("1");
+  const stat2 = getStatValue("2");
+
   const scoreOne =
-    getStatValue("1") || Number(raw.scoreOne ?? raw.ScoreOne ?? 0);
+    stat1 !== undefined ? stat1 : Number(raw.scoreOne ?? raw.ScoreOne ?? 0);
+
   const scoreTwo =
-    getStatValue("2") || Number(raw.scoreTwo ?? raw.ScoreTwo ?? 0);
+    stat2 !== undefined ? stat2 : Number(raw.scoreTwo ?? raw.ScoreTwo ?? 0);
+
+  if (!Number.isFinite(scoreOne) || scoreOne < 0) {
+    throw new Error(`Invalid scoreOne: ${scoreOne}`);
+  }
+  if (!Number.isFinite(scoreTwo) || scoreTwo < 0) {
+    throw new Error(`Invalid scoreTwo: ${scoreTwo}`);
+  }
+
+  const rawGameState = raw.gameState ?? raw.GameState ?? 0;
+  const gameState =
+    typeof rawGameState === "number" ||
+    (typeof rawGameState === "string" &&
+      rawGameState.trim() !== "" &&
+      !isNaN(Number(rawGameState)))
+      ? Number(rawGameState)
+      : String(rawGameState);
+
+  const rawParticipant = raw.Participant ?? raw.participantId;
+  const participantId =
+    rawParticipant !== undefined && rawParticipant !== null
+      ? Number(rawParticipant)
+      : undefined;
 
   return {
     fixtureId,
     seq,
-    ts: Number(raw.ts ?? raw.Ts ?? Date.now()),
-    gameState: Number(raw.gameState ?? raw.GameState ?? 0),
+    ts,
+    gameState,
     period: Number(raw.period ?? raw.Period ?? 0),
     statusId: Number(raw.statusId ?? raw.StatusId ?? 0),
     action,
@@ -104,29 +203,70 @@ export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
     scoreTwo,
     statKey: raw.statKey !== undefined ? Number(raw.statKey) : undefined,
     statValue: raw.statValue !== undefined ? Number(raw.statValue) : undefined,
-    participantId:
-      raw.participantId !== undefined ? Number(raw.participantId) : undefined,
+    participantId,
     ingestedAt: new Date().toISOString(),
     eventKey,
   };
 }
 
-export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate {
-  const fixtureId = Number(raw.fixtureId ?? raw.FixtureId);
-  const seq = Number(raw.seq ?? raw.Seq ?? 0);
-
-  if (isNaN(fixtureId) || fixtureId <= 0) {
-    throw new Error(`Invalid fixture ID: ${raw.fixtureId}`);
+export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate | null {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid raw odds update object");
   }
 
-  const oddsType =
-    raw.super_odds_type ?? raw.superOddsType ?? raw.SuperOddsType ?? "";
+  const rawFixtureId = raw.fixtureId ?? raw.FixtureId;
+  const fixtureId = Number(rawFixtureId);
+  if (
+    rawFixtureId === undefined ||
+    rawFixtureId === null ||
+    !Number.isFinite(fixtureId) ||
+    fixtureId <= 0 ||
+    !Number.isInteger(fixtureId)
+  ) {
+    throw new Error(`Invalid fixture ID: ${rawFixtureId}`);
+  }
+
+  const rawTs = raw.ts ?? raw.Ts;
+  const ts = Number(rawTs);
+  if (
+    rawTs === undefined ||
+    rawTs === null ||
+    !Number.isFinite(ts) ||
+    ts <= 0
+  ) {
+    throw new Error(`Invalid or missing odds timestamp: ${rawTs}`);
+  }
+
+  const superOddsType =
+    raw.super_odds_type ?? raw.superOddsType ?? raw.SuperOddsType;
+  const marketPeriod = raw.marketPeriod ?? raw.MarketPeriod;
+
+  // Filter market type: accept only full-match 1X2_PARTICIPANT_RESULT
+  if (
+    superOddsType !== undefined &&
+    superOddsType !== null &&
+    superOddsType !== ""
+  ) {
+    if (superOddsType !== "1X2_PARTICIPANT_RESULT") {
+      return null;
+    }
+  }
+  if (
+    marketPeriod !== undefined &&
+    marketPeriod !== null &&
+    marketPeriod !== ""
+  ) {
+    return null;
+  }
+
+  const oddsType = superOddsType ?? "1X2_PARTICIPANT_RESULT";
+  const seq = Number(raw.seq ?? raw.Seq ?? 0);
+  const messageId = raw.MessageId ?? raw.messageId;
 
   let oddsOne = 0;
   let oddsDraw = 0;
   let oddsTwo = 0;
 
-  // Extract from PriceNames/Prices (Finding 1)
   const priceNames = raw.PriceNames ?? raw.priceNames ?? [];
   const prices = raw.Prices ?? raw.prices ?? [];
 
@@ -141,9 +281,10 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate {
       (name: string) => name === "part2" || name === "2" || name === "away"
     );
 
-    if (idx1 !== -1) oddsOne = Number(prices[idx1]);
-    if (idxDraw !== -1) oddsDraw = Number(prices[idxDraw]);
-    if (idx2 !== -1) oddsTwo = Number(prices[idx2]);
+    if (idx1 !== -1 && idx1 < prices.length) oddsOne = Number(prices[idx1]);
+    if (idxDraw !== -1 && idxDraw < prices.length)
+      oddsDraw = Number(prices[idxDraw]);
+    if (idx2 !== -1 && idx2 < prices.length) oddsTwo = Number(prices[idx2]);
   } else if (raw.outcomes) {
     const o1 = raw.outcomes.find(
       (o: any) => o.type === 1 || o.outcomeType === 1
@@ -168,14 +309,28 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate {
     oddsTwo = Number(raw.oddsTwo ?? raw.priceTwo ?? 0);
   }
 
+  if (
+    !Number.isFinite(oddsOne) ||
+    oddsOne <= 0 ||
+    !Number.isFinite(oddsDraw) ||
+    oddsDraw <= 0 ||
+    !Number.isFinite(oddsTwo) ||
+    oddsTwo <= 0
+  ) {
+    throw new Error(
+      `Invalid, missing, zero, or negative 1X2 prices: oddsOne=${oddsOne}, oddsDraw=${oddsDraw}, oddsTwo=${oddsTwo}`
+    );
+  }
+
   return {
     fixtureId,
     seq,
-    ts: Number(raw.ts ?? raw.Ts ?? Date.now()),
+    ts,
     oddsOne,
     oddsDraw,
     oddsTwo,
     oddsType,
+    messageId,
     ingestedAt: new Date().toISOString(),
   };
 }

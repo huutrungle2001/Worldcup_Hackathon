@@ -25,7 +25,7 @@ async function runTest() {
       oddsOne: 1500,
       oddsDraw: 3500,
       oddsTwo: 5000,
-    })
+    })!
   );
   logger.info(
     `Current state: ${market.state} | Odds: ${market.oddsOne}-${market.oddsDraw}-${market.oddsTwo}`
@@ -60,7 +60,7 @@ async function runTest() {
       oddsOne: 1200,
       oddsDraw: 4000,
       oddsTwo: 7000,
-    })
+    })!
   );
   logger.info(`Current state: ${market.state} (Expected: HALTED)`);
 
@@ -85,7 +85,7 @@ async function runTest() {
       oddsOne: 1250,
       oddsDraw: 4100,
       oddsTwo: 7200,
-    })
+    })!
   );
   logger.info(`Current state: ${market.state} (Expected: OPEN)`);
 
