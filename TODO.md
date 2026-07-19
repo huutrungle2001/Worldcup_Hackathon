@@ -14,7 +14,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 | Milestone | Status | Exit condition |
 |---|---|---|
 | M0 — Architecture gate | Complete | Owner approves MVP and network decisions |
-| M1 — Foundation | Not started | Local build, lint, typecheck, and tests pass |
+| M1 — Foundation | Complete | Local build, lint, typecheck, and tests pass |
 | M2 — TxLINE connection | Not started | Snapshots and both SSE streams remain healthy |
 | M3 — Autonomous agent | Not started | Goal event halts the market exactly once |
 | M4 — Verification | Not started | Real proof passes `validateStatV2` on devnet |
@@ -38,64 +38,64 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 ### M0 Acceptance
 
-- [ ] The owner has approved the six decisions listed under the Architecture Approval Gate.
-- [ ] The wallet has enough devnet SOL for subscription, activation-related transactions, and validation receipts.
-- [ ] No mainnet value appears in a devnet runtime profile except as an explicitly documented alternative.
+- [x] The owner has approved the six decisions listed under the Architecture Approval Gate.
+- [x] The wallet has enough devnet SOL for subscription, activation-related transactions, and validation receipts.
+- [x] No mainnet value appears in a devnet runtime profile except as an explicitly documented alternative.
 
 ## M1 — Project Foundation
 
 ### Scaffold
 
-- [ ] **PG-101:** Create a Node.js 20+ TypeScript project.
-- [ ] **PG-102:** Keep application source under `src/` and runnable helpers under `scripts/`.
-- [ ] **PG-103:** Add separate modules for config, TxLINE, domain, agent, Solana, replay, server, and web UI.
-- [ ] **PG-104:** Add `package.json` scripts for development, build, start, lint, typecheck, unit tests, and integration tests.
-- [ ] **PG-105:** Add strict TypeScript configuration.
-- [ ] **PG-106:** Add formatting and linting with deterministic CI commands.
-- [ ] **PG-107:** Add a test runner and coverage command.
+- [x] **PG-101:** Create a Node.js 20+ TypeScript project.
+- [x] **PG-102:** Keep application source under `src/` and runnable helpers under `scripts/`.
+- [x] **PG-103:** Add separate modules for config, TxLINE, domain, agent, Solana, replay, server, and web UI.
+- [x] **PG-104:** Add `package.json` scripts for development, build, start, lint, typecheck, unit tests, and integration tests.
+- [x] **PG-105:** Add strict TypeScript configuration.
+- [x] **PG-106:** Add formatting and linting with deterministic CI commands.
+- [x] **PG-107:** Add a test runner and coverage command.
 
 ### Configuration and Secrets
 
-- [ ] **PG-108:** Create typed network profiles for devnet and mainnet.
-- [ ] **PG-109:** Validate all required environment variables during startup and fail with actionable messages.
-- [ ] **PG-110:** Add `.env.example` containing placeholders only.
-- [ ] **PG-111:** Verify `.env`, `.env.*`, `_keys/`, wallet JSON files, logs, and runtime data are ignored.
-- [ ] **PG-112:** Reject startup when the loaded IDL program address differs from the selected network program ID.
-- [ ] **PG-113:** Reject startup when the API host and RPC network do not match the selected network.
-- [ ] **PG-114:** Ensure JWTs, API tokens, signatures, and wallet paths are redacted from structured logs.
+- [x] **PG-108:** Create typed network profiles for devnet and mainnet.
+- [x] **PG-109:** Validate all required environment variables during startup and fail with actionable messages.
+- [x] **PG-110:** Add `.env.example` containing placeholders only.
+- [x] **PG-111:** Verify `.env`, `.env.*`, `_keys/`, wallet JSON files, logs, and runtime data are ignored.
+- [x] **PG-112:** Reject startup when the loaded IDL program address differs from the selected network program ID.
+- [x] **PG-113:** Reject startup when the API host and RPC network do not match the selected network.
+- [x] **PG-114:** Ensure JWTs, API tokens, signatures, and wallet paths are redacted from structured logs.
 
 ### Observability
 
-- [ ] **PG-115:** Add structured logging with fixture ID, sequence, event type, market state, and correlation ID.
-- [ ] **PG-116:** Add a health model for scores SSE, odds SSE, TxLINE HTTP, Solana RPC, and replay mode.
-- [ ] **PG-117:** Add process-level handling for uncaught errors and graceful shutdown of streams.
+- [x] **PG-115:** Add structured logging with fixture ID, sequence, event type, market state, and correlation ID.
+- [x] **PG-116:** Add a health model for scores SSE, odds SSE, TxLINE HTTP, Solana RPC, and replay mode.
+- [x] **PG-117:** Add process-level handling for uncaught errors and graceful shutdown of streams.
 
 ### M1 Acceptance
 
-- [ ] Clean install succeeds on Node.js 20+.
-- [ ] Build, lint, typecheck, and empty test suite pass.
-- [ ] Invalid or mixed network configuration fails before any API request or transaction.
-- [ ] A log-redaction test proves secrets are not emitted.
+- [x] Clean install succeeds on Node.js 20+.
+- [x] Build, lint, typecheck, and empty test suite pass.
+- [x] Invalid or mixed network configuration fails before any API request or transaction.
+- [x] A log-redaction test proves secrets are not emitted.
 
 ## M2 — TxLINE Subscription, API, and Streaming
 
 ### Wallet and Subscription
 
-- [ ] **PG-201:** Load the Anchor wallet only from `ANCHOR_WALLET`.
-- [ ] **PG-202:** Query and display the wallet's public key and network balance.
-- [ ] **PG-203:** Derive subscription PDAs and token accounts dynamically.
-- [ ] **PG-204:** Read the on-chain pricing matrix and confirm the selected free service level before subscribing.
-- [ ] **PG-205:** Simulate the subscription transaction.
-- [ ] **PG-206:** Submit with `skipPreflight: false` only after balance and network checks pass.
-- [ ] **PG-207:** Store only the public subscription signature in logs and diagnostics.
+- [x] **PG-201:** Load the Anchor wallet only from `ANCHOR_WALLET`.
+- [x] **PG-202:** Query and display the wallet's public key and network balance.
+- [x] **PG-203:** Derive subscription PDAs and token accounts dynamically.
+- [x] **PG-204:** Read the on-chain pricing matrix and confirm the selected free service level before subscribing.
+- [x] **PG-205:** Simulate the subscription transaction.
+- [x] **PG-206:** Submit with `skipPreflight: false` only after balance and network checks pass.
+- [x] **PG-207:** Store only the public subscription signature in logs and diagnostics.
 
 ### Activation and Credential Lifecycle
 
-- [ ] **PG-208:** Request a guest JWT from the selected network host.
-- [ ] **PG-209:** Construct the exact activation message `${txSig}:${selectedLeagues.join(",")}:${jwt}`.
-- [ ] **PG-210:** Sign the activation message with the same wallet that subscribed.
-- [ ] **PG-211:** Base64-encode the detached signature and activate the API token.
-- [ ] **PG-212:** Keep the activated API token server-side.
+- [x] **PG-208:** Request a guest JWT from the selected network host.
+- [x] **PG-209:** Construct the exact activation message `${txSig}:${selectedLeagues.join(",")}:${jwt}`.
+- [x] **PG-210:** Sign the activation message with the same wallet that subscribed.
+- [x] **PG-211:** Base64-encode the detached signature and activate the API token.
+- [x] **PG-212:** Keep the activated API token server-side.
 - [ ] **PG-213:** Renew only the guest JWT on `401`, retaining the activated API token.
 - [ ] **PG-214:** Surface `403` as a non-retryable network/subscription configuration error.
 
