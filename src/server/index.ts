@@ -134,9 +134,9 @@ app.post("/api/replay/start", demoReplayGate, async (req, res) => {
       status: replayEngine.getStatus(),
     });
   }
-  if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 50) {
+  if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 100) {
     return res.status(400).json({
-      error: "Replay speed must be a number between 1 and 50.",
+      error: "Replay speed must be a number between 1 and 100.",
       status: replayEngine.getStatus(),
     });
   }
@@ -186,9 +186,9 @@ app.post("/api/replay/speed", demoReplayGate, (req, res) => {
   const { speed } = req.body;
   const numSpeed = Number(speed);
 
-  if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 50) {
+  if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 100) {
     return res.status(400).json({
-      error: "Replay speed must be a number between 1 and 50.",
+      error: "Replay speed must be a number between 1 and 100.",
       status: replayEngine.getStatus(),
     });
   }

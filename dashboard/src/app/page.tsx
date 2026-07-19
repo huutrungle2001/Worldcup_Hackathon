@@ -679,7 +679,7 @@ export default function Dashboard() {
               <div className="flex flex-col gap-2">
                 <span className="text-xs font-mono text-slate-400">Replay Speed Select</span>
                 <div className="flex gap-2" role="group" aria-label="Replay speed selection">
-                  {[1, 5, 10, 20].map((speed) => (
+                  {[1, 10, 50, 100].map((speed) => (
                     <button
                       key={speed}
                       onClick={() => updateSpeed(speed)}

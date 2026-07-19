@@ -96,8 +96,8 @@ export class ReplayEngine {
       return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
     }
 
-    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 50) {
-      const msg = "Replay speed must be a finite number between 1 and 50.";
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 100) {
+      const msg = "Replay speed must be a finite number between 1 and 100.";
       this.updateStatus("FAILED", "Invalid replay speed", msg);
       return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
     }
@@ -251,8 +251,8 @@ export class ReplayEngine {
   }
 
   public setSpeed(speed: number): ReplayActionResult {
-    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 50) {
-      const msg = "Replay speed must be a finite number between 1 and 50.";
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 100) {
+      const msg = "Replay speed must be a finite number between 1 and 100.";
       return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
     }
     logger.info(`Replay speed changed to ${speed}x`);
