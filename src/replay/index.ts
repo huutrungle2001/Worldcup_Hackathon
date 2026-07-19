@@ -46,6 +46,8 @@ export class ReplayEngine {
   private errorMessage: string | null = null;
   private lastUpdated: string = new Date().toISOString();
   private replayGeneration = 0;
+  private nextStepScheduledAt = 0;
+  private nextStepTimeDiff = 0;
 
   public getDemoFixtureId(): number | null {
     const raw = process.env.DEMO_FIXTURE_ID;
@@ -237,6 +239,9 @@ export class ReplayEngine {
       // Cap the maximum delay to 1500ms to keep the demo dynamic during large event gaps (e.g. halftime)
       const delay = Math.min(1500, Math.max(50, Math.floor(timeDiff / this.speedMultiplier)));
 
+      this.nextStepScheduledAt = Date.now();
+      this.nextStepTimeDiff = timeDiff;
+
       logger.debug(`Scheduling next replay step in ${delay}ms...`);
       this.timeoutId = setTimeout(() => this.executeNextStep(), delay);
     } else {
@@ -253,6 +258,17 @@ export class ReplayEngine {
     logger.info(`Replay speed changed to ${speed}x`);
     this.speedMultiplier = speed;
     this.lastUpdated = new Date().toISOString();
+
+    // Reschedule active timeout on speed changes for snappy user response
+    if (this.state === "RUNNING" && this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      const elapsed = Date.now() - this.nextStepScheduledAt;
+      const newTotalDelay = Math.min(1500, Math.max(50, Math.floor(this.nextStepTimeDiff / speed)));
+      const remainingDelay = Math.max(50, newTotalDelay - elapsed);
+      logger.info(`Rescheduling current replay step to run in ${remainingDelay}ms (speed: ${speed}x).`);
+      this.timeoutId = setTimeout(() => this.executeNextStep(), remainingDelay);
+    }
+
     return { success: true, status: this.getStatus() };
   }
 
