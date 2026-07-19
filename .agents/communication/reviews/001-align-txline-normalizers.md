@@ -249,3 +249,34 @@ commit and notify Codex.
 | Worktree status before review update | Clean |
 | Commit signing | SSH signature block is present; local trust verification remains unavailable |
 | On-chain activity | No transaction-producing command was run during final re-review |
+
+---
+
+## Closure Review — Follow-up Commit `3fe2546`
+
+### Decision
+
+**APPROVE**
+
+Task 001 is complete. All production findings, regression-test requirements,
+compile issues, execution-log corrections, and documentation-preservation
+requirements have been resolved across commits `275fc5f`, `0c0b4f3`,
+`45cf8f4`, and `3fe2546`.
+
+### Closure Evidence
+
+- All seven requested pre-existing comments are restored in
+  [`scripts/test_all.ts`](../../../scripts/test_all.ts), including both inline
+  explanations.
+- The final follow-up contains no production-code behavior change.
+- `yarn test` passed with exit `0`.
+- `yarn ts-node scripts/test_agent.ts` passed with exit `0` under `TEST_MODE`;
+  no live validation branch executed.
+- `yarn typecheck` passed with exit `0`.
+- Both the final-commit diff and full Task 001 diff pass `git diff --check`.
+- The worktree was clean before this closure-review update, and `HEAD` matched
+  `origin/master` at `3fe2546ed9ced23a2d26ee0adf0cfe358a650d04`.
+- The commit uses a conventional subject and contains an SSH signature block;
+  local signer-trust verification remains unavailable because
+  `gpg.ssh.allowedSignersFile` is not configured.
+- No network request or on-chain transaction was made during closure review.
