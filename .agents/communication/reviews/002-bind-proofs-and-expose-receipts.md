@@ -6,6 +6,7 @@
 
 - **Initial reviewed commit:** `bda35d02bfc86597cf96ca4af55a48de5f41158d`
 - **Follow-up reviewed commit:** `503bfad0fc1c891134fe634a17da904014a17094`
+- **Closure candidate reviewed commit:** `5a945028b4dc372557f0ec4478a2f842ea3fca51`
 - **Reviewer:** Codex
 - **Review date:** 2026-07-20
 
@@ -15,6 +16,98 @@ receipts, empty API filters, and the missing dashboard timestamp/signature
 guard. It is not ready to approve because exact proof-set binding, public
 receipt integrity, active-network metadata, and the required regression
 coverage remain incomplete.
+
+## Closure Re-review — `5a94502`
+
+### Decision: `REQUEST_CHANGES`
+
+The follow-up fixes exact length/order comparison when an expectation exists,
+defensive receipt reads, common status/mode contradictions, execution-stage
+labels, and application-configured network metadata. Four bounded blockers
+remain before Task 002 can close.
+
+### 1. High — A missing pending expectation bypasses proof binding
+
+[`registerVerificationSuccess`](../../../src/agent/risk.ts#L193) performs exact
+matching only inside `if (market.pendingVerificationExpectedStats)`. A market
+with the expected sequence and type but no expected-stat array skips the check,
+records the sequence as verified, clears pending state, and settles.
+
+A local probe set `FINAL_PROOF_PENDING`, sequence `9`, type `FINAL`, and no
+expected-stat array. Supplying keys `1` and `2` transitioned the market to
+`SETTLED`. Require a non-empty pending expectation as part of the transition
+identity; missing expectations must fail closed without changing any state.
+
+### 2. High — Unknown error text and malformed stat fields remain public
+
+[`sanitizeReasonString`](../../../src/solana/validation.ts#L104) still returns
+arbitrary unmatched input after best-effort regex replacement. Local probes
+produced both:
+
+```text
+Authorization: [REDACTED] AUTH_SENTINEL
+opaque credential SENTINEL_SECRET
+```
+
+The store also continues coercing nested stat fields at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L139); string key
+`"1"` and `value: false` were published as `{ key: 1, value: 0 }`.
+
+Use a closed allowlist of controlled public reason codes/messages and map every
+unknown reason to one generic message. Strictly validate receipt stat scalar
+types instead of coercing them.
+
+### 3. High — A malformed rejected proof can escape without a receipt
+
+The identity-mismatch branch is outside the protected construction block and
+maps returned stats without validating each element at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L539). With a
+mocked, no-network response containing `statsToProve: [null]`, identity checking
+correctly rejected the response, but receipt construction threw
+`Cannot read properties of null` and stored zero receipts.
+
+Build rejected receipts only from already validated public values, or wrap the
+entire post-fetch rejection path. Every fetched invalid proof must resolve
+fail-closed with exactly one sanitized `REJECTED` or `FAILED` receipt.
+
+### 4. High — The follow-up removed pre-existing regression coverage
+
+The Task 002 follow-up rewrote [`scripts/test_all.ts`](../../../scripts/test_all.ts)
+with `270` insertions and `212` deletions relative to the approved Task 001
+baseline. Removed assertions include shuffled odds mapping, non-full-match and
+untyped market rejection, missing/negative/NaN/infinite price rejection,
+structured-log redaction, idempotent transitions, stale odds, delayed proof
+races, and exact pre-existing comments.
+
+The newly labeled “original ten requirements” also still uses one wrong-key
+case to represent missing/extra/reordered/duplicate cases, and one negative key
+to represent the full precheck matrix. Restore every pre-existing assertion and
+comment verbatim, then add Task 002 cases without replacing older coverage.
+
+### Closure Verification
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn typecheck` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; `TEST_MODE` only |
+| `cd dashboard && yarn lint` | Passed, exit `0` |
+| `cd dashboard && yarn build` | Passed, exit `0`; non-blocking workspace-root warning |
+| `git diff 503bfad..5a94502 --check` | Passed, exit `0` |
+| Commit signing | SSH signature block is present; local trust verification unavailable |
+| Targeted probes | All four blockers above reproduced without network or Solana calls |
+
+### Final Closure Requirements
+
+1. Require the pending expected-stat array and compare it exactly before any
+   verification state mutation.
+2. Replace fallback reason passthrough with a closed controlled mapping and
+   reject malformed receipt stat fields.
+3. Guarantee one terminal receipt for malformed identity-rejection paths.
+4. Restore all pre-existing `scripts/test_all.ts` assertions/comments and add
+   direct regression cases for the three runtime failures above.
+5. Update the execution log, rerun the full Task 002 command set, create a
+   signed conventional follow-up commit, and notify Codex through tmux.
 
 ## Follow-up Re-review — `503bfad`
 

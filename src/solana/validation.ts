@@ -71,11 +71,26 @@ export interface SanitizedReceipt {
 
 /**
  * Controlled public reason code and message mapping to prevent credential leakage.
+ * Uses a closed allowlist of safe public messages. Maps any unknown string to a safe default.
  */
 export function sanitizeReasonString(rawReason?: string): string | undefined {
   if (!rawReason || typeof rawReason !== "string") return undefined;
 
-  // Controlled public error codes mapping
+  const knownReasons: Record<string, string> = {
+    "Proof request parameter validation failed": "Proof request parameter validation failed",
+    "Expected stats validation failed": "Expected stats validation failed",
+    "TxLINE proof request failed": "TxLINE proof request failed",
+    "Proof response identity check failed": "Proof response identity check failed",
+    "On-chain simulation predicate check failed": "On-chain simulation predicate check failed",
+    "Low wallet balance fallback to simulation": "Low wallet balance fallback to simulation",
+    "On-chain simulation execution failed": "On-chain simulation execution failed",
+    "Validation transaction submission failed": "Validation transaction submission failed",
+  };
+
+  if (knownReasons[rawReason]) {
+    return knownReasons[rawReason];
+  }
+
   if (rawReason.includes("Invalid fixtureId") || rawReason.includes("Invalid sequence")) {
     return "Proof request parameter validation failed";
   }
@@ -101,12 +116,8 @@ export function sanitizeReasonString(rawReason?: string): string | undefined {
     return "Validation transaction submission failed";
   }
 
-  // Fallback scrub of any credential patterns
-  return rawReason
-    .replace(/(bearer|jwt|token|secret|x-api-token|authorization)[=:\s]+[^\s;]+/gi, "$1: [REDACTED]")
-    .replace(/https?:\/\/[^\s]+/gi, "[REDACTED_URL]")
-    .replace(/(\/|\w+:)[^\s]*\.(json|key|pem|txt)/gi, "[REDACTED_PATH]")
-    .replace(/walletPath[=:\s]+[^\s;]+/gi, "walletPath: [REDACTED]");
+  // Closed allowlist fallback: return safe generic message for any unknown/unmatched reason string
+  return "Proof validation failed";
 }
 
 export class ReceiptStore {
@@ -136,20 +147,44 @@ export class ReceiptStore {
         ? rawReceipt.proofTimestamp
         : 0;
 
-    const expectedStats: ExpectedStat[] = Array.isArray(rawReceipt.expectedStats)
-      ? rawReceipt.expectedStats.map((s: any) => ({
-          key: Number(s.key),
-          value: Number(s.value),
-        }))
-      : [];
+    // Closure Finding 2: Strict scalar type checking for expected and proved stats (no coercion)
+    if (!Array.isArray(rawReceipt.expectedStats)) return;
+    const expectedStats: ExpectedStat[] = [];
+    for (const s of rawReceipt.expectedStats) {
+      if (
+        !s ||
+        typeof s !== "object" ||
+        typeof s.key !== "number" ||
+        !Number.isInteger(s.key) ||
+        typeof s.value !== "number" ||
+        !Number.isFinite(s.value)
+      ) {
+        return; // Reject malformed stat scalar types
+      }
+      expectedStats.push({ key: s.key, value: s.value });
+    }
 
-    const provedStats: ProvedStat[] = Array.isArray(rawReceipt.provedStats)
-      ? rawReceipt.provedStats.map((s: any) => ({
-          key: Number(s.key),
-          value: Number(s.value),
-          period: Number(s.period ?? 0),
-        }))
-      : [];
+    const provedStats: ProvedStat[] = [];
+    if (rawReceipt.provedStats !== undefined) {
+      if (!Array.isArray(rawReceipt.provedStats)) return;
+      for (const s of rawReceipt.provedStats) {
+        if (
+          !s ||
+          typeof s !== "object" ||
+          typeof s.key !== "number" ||
+          !Number.isInteger(s.key) ||
+          typeof s.value !== "number" ||
+          !Number.isFinite(s.value)
+        ) {
+          return; // Reject malformed proved stat scalar types
+        }
+        provedStats.push({
+          key: s.key,
+          value: s.value,
+          period: typeof s.period === "number" ? s.period : 0,
+        });
+      }
+    }
 
     const status: "CONFIRMED" | "SIMULATED" | "REJECTED" | "FAILED" = rawReceipt.status;
     const mode: "TRANSACTION" | "SIMULATION" | "PRECHECK" = rawReceipt.mode;
@@ -245,6 +280,8 @@ export function validateExpectedStatsPrecheck(
   for (let i = 0; i < expectedStats.length; i++) {
     const stat = expectedStats[i];
     if (
+      !stat ||
+      typeof stat !== "object" ||
       stat.key === undefined ||
       stat.key === null ||
       typeof stat.key !== "number" ||
@@ -253,7 +290,7 @@ export function validateExpectedStatsPrecheck(
     ) {
       return {
         valid: false,
-        reason: `Unsupported or non-integer stat key at index ${i}: ${stat.key}. Allowed keys are 1 (Participant 1 Goals) and 2 (Participant 2 Goals)`,
+        reason: `Unsupported or non-integer stat key at index ${i}. Allowed keys are 1 (Participant 1 Goals) and 2 (Participant 2 Goals)`,
       };
     }
 
@@ -528,36 +565,67 @@ export class SolanaValidator {
       return { success: false, provedStats: [] };
     }
 
-    const identityCheck = validateProofIdentity(
-      fixtureId,
-      seq,
-      expectedStats,
-      validationData
-    );
-    if (!identityCheck.valid) {
-      logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
-      const provedStats: ProvedStat[] = Array.isArray(validationData?.statsToProve)
-        ? validationData.statsToProve.map((stat: any) => ({
-            key: Number(stat.key ?? stat.Key ?? 0),
-            value: Number(stat.value ?? stat.Value ?? 0),
-            period: Number(stat.period ?? stat.Period ?? 0),
-          }))
-        : [];
+    // Closure Finding 3: Safe identity check wrapper ensuring exactly one sanitized receipt on error
+    try {
+      const identityCheck = validateProofIdentity(
+        fixtureId,
+        seq,
+        expectedStats,
+        validationData
+      );
 
-      const minTs = Number(validationData?.summary?.updateStats?.minTimestamp ?? 0);
+      if (!identityCheck.valid) {
+        logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
 
+        let safeProvedStats: ProvedStat[] = [];
+        if (Array.isArray(validationData?.statsToProve)) {
+          safeProvedStats = validationData.statsToProve
+            .filter((stat: any) => stat && typeof stat === "object")
+            .map((stat: any) => {
+              const k = stat.key ?? stat.Key;
+              const v = stat.value ?? stat.Value;
+              const p = stat.period ?? stat.Period;
+              return {
+                key: typeof k === "number" && Number.isInteger(k) ? k : 0,
+                value: typeof v === "number" && Number.isFinite(v) ? v : 0,
+                period: typeof p === "number" && Number.isFinite(p) ? p : 0,
+              };
+            });
+        }
+
+        const minTsRaw = validationData?.summary?.updateStats?.minTimestamp ?? validationData?.Summary?.UpdateStats?.MinTimestamp;
+        const minTs = typeof minTsRaw === "number" && Number.isFinite(minTsRaw) ? minTsRaw : 0;
+
+        receiptStore.addReceipt({
+          id: receiptId,
+          fixtureId,
+          seq,
+          expectedStats,
+          provedStats: safeProvedStats,
+          proofTimestamp: minTs,
+          programId: programIdStr,
+          network: networkStr,
+          status: "REJECTED",
+          mode: "PRECHECK",
+          reason: identityCheck.reason,
+          validatedAt: new Date().toISOString(),
+        });
+        return { success: false, provedStats: [] };
+      }
+    } catch (err: any) {
+      logger.error(`Identity check evaluation error:`, err);
       receiptStore.addReceipt({
         id: receiptId,
         fixtureId,
         seq,
         expectedStats,
-        provedStats,
-        proofTimestamp: minTs,
+        provedStats: [],
+        proofTimestamp: 0,
         programId: programIdStr,
         network: networkStr,
         status: "REJECTED",
         mode: "PRECHECK",
-        reason: identityCheck.reason,
+        reason: "Proof response identity check failed",
         validatedAt: new Date().toISOString(),
       });
       return { success: false, provedStats: [] };

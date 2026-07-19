@@ -189,25 +189,31 @@ export class RiskAgent {
       return;
     }
 
-    // 2. Follow-up Finding 1: Enforce EXACT ordered matching with pending expected stats
-    if (market.pendingVerificationExpectedStats) {
-      const expected = market.pendingVerificationExpectedStats;
-      if (provedStats.length !== expected.length) {
+    // 2. Closure Finding 1: Pending expected stats MUST exist and match provedStats exactly
+    const expected = market.pendingVerificationExpectedStats;
+    if (!expected || !Array.isArray(expected) || expected.length === 0) {
+      logger.warn(
+        `Received verification success for seq ${seq}, but market for fixture ${fixtureId} has no pending expected stats array. Ignoring and keeping market pending.`
+      );
+      return;
+    }
+
+    if (provedStats.length !== expected.length) {
+      logger.warn(
+        `Received verification success for seq ${seq}, but provedStats length (${provedStats.length}) does not match expected length (${expected.length}). Ignoring.`
+      );
+      return;
+    }
+    for (let i = 0; i < expected.length; i++) {
+      if (
+        !provedStats[i] ||
+        provedStats[i].key !== expected[i].key ||
+        provedStats[i].value !== expected[i].value
+      ) {
         logger.warn(
-          `Received verification success for seq ${seq}, but provedStats length (${provedStats.length}) does not match expected length (${expected.length}). Ignoring.`
+          `Received verification success for seq ${seq}, but proved stat at index ${i} does not match expected (key ${expected[i].key}, val ${expected[i].value}). Ignoring.`
         );
         return;
-      }
-      for (let i = 0; i < expected.length; i++) {
-        if (
-          provedStats[i].key !== expected[i].key ||
-          provedStats[i].value !== expected[i].value
-        ) {
-          logger.warn(
-            `Received verification success for seq ${seq}, but proved stat at index ${i} (key ${provedStats[i].key}, val ${provedStats[i].value}) does not match expected (key ${expected[i].key}, val ${expected[i].value}). Ignoring.`
-          );
-          return;
-        }
       }
     }
 

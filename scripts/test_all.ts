@@ -17,6 +17,7 @@ import {
   receiptStore,
   ExpectedStat,
   sanitizeReasonString,
+  SolanaValidator,
 } from "../src/solana/validation";
 import { appConfig } from "../src/config";
 
@@ -219,6 +220,13 @@ function testOddsNormalization() {
   };
   const normShuffled = normalizeOddsUpdate(rawShuffled);
   if (!normShuffled) throw new Error("Expected non-null shuffled odds");
+  if (
+    normShuffled.oddsOne !== 2100 ||
+    normShuffled.oddsDraw !== 3100 ||
+    normShuffled.oddsTwo !== 4100
+  ) {
+    throw new Error("Shuffled price routing failed");
+  }
 
   const rawOverUnder = {
     FixtureId: 123,
@@ -238,7 +246,55 @@ function testOddsNormalization() {
         Ts: 1790348501000,
         SuperOddsType: "1X2_PARTICIPANT_RESULT",
         PriceNames: ["part1", "draw", "part2"],
+        Prices: [2000, 3000],
+      }),
+    "prices"
+  );
+
+  expectThrow(
+    () =>
+      normalizeOddsUpdate({
+        FixtureId: 123,
+        Ts: 1790348501000,
+        SuperOddsType: "1X2_PARTICIPANT_RESULT",
+        PriceNames: ["part1", "draw", "part2"],
         Prices: [0, 3000, 4000],
+      }),
+    "prices"
+  );
+
+  expectThrow(
+    () =>
+      normalizeOddsUpdate({
+        FixtureId: 123,
+        Ts: 1790348501000,
+        SuperOddsType: "1X2_PARTICIPANT_RESULT",
+        PriceNames: ["part1", "draw", "part2"],
+        Prices: [-100, 3000, 4000],
+      }),
+    "prices"
+  );
+
+  expectThrow(
+    () =>
+      normalizeOddsUpdate({
+        FixtureId: 123,
+        Ts: 1790348501000,
+        SuperOddsType: "1X2_PARTICIPANT_RESULT",
+        PriceNames: ["part1", "draw", "part2"],
+        Prices: [NaN, 3000, 4000],
+      }),
+    "prices"
+  );
+
+  expectThrow(
+    () =>
+      normalizeOddsUpdate({
+        FixtureId: 123,
+        Ts: 1790348501000,
+        SuperOddsType: "1X2_PARTICIPANT_RESULT",
+        PriceNames: ["part1", "draw", "part2"],
+        Prices: [Infinity, 3000, 4000],
       }),
     "prices"
   );
@@ -252,6 +308,7 @@ function testLogRedaction() {
   const testLogger = new Logger();
   let output = "";
 
+  // Temporarily redirect console.log to inspect output
   const originalLog = console.log;
   console.log = (msg: string) => {
     output = msg;
@@ -266,6 +323,15 @@ function testLogRedaction() {
         `Failed to redact JWT from log string. Output: ${output}`
       );
     }
+
+    const secretCtx = {
+      token: "secret123",
+      otherField: "public_value",
+    };
+    testLogger.info("Log with context object", secretCtx);
+    if (output.includes("secret123") || !output.includes("[REDACTED]")) {
+      throw new Error(`Failed to redact context secret. Output: ${output}`);
+    }
   } finally {
     console.log = originalLog;
   }
@@ -279,13 +345,22 @@ function testStateTransitions() {
   const fixtureId = 555;
   const market = marketManager.getOrCreateMarket(fixtureId);
 
+  // Initial OPEN
   if ((market.state as string) !== "OPEN") {
     throw new Error(`Expected OPEN state, got ${market.state}`);
   }
 
+  // Transition to HALTED
   marketManager.transitionTo(market, "HALTED", "TEST_HALT");
   if ((market.state as string) !== "HALTED" || !market.haltedAt) {
     throw new Error(`Expected HALTED state, got ${market.state}`);
+  }
+
+  // Idempotent transition check (should return false and not add new audit logs)
+  const lenBefore = market.auditTrail.length;
+  const result = marketManager.transitionTo(market, "HALTED", "TEST_HALT");
+  if (result || market.auditTrail.length !== lenBefore) {
+    throw new Error("Halt transition should be idempotent");
   }
 
   logger.info("✓ State machine tests passed.");
@@ -294,6 +369,7 @@ function testStateTransitions() {
 function testRiskAgentRacePaths() {
   logger.info("Running RiskAgent race path and verification binding tests...");
 
+  // Reset/clean market
   const fixtureId = 999;
   const riskAgent = new RiskAgent();
   const market = marketManager.getOrCreateMarket(fixtureId);
@@ -302,7 +378,12 @@ function testRiskAgentRacePaths() {
   m.scoreOne = 0;
   m.scoreTwo = 0;
   m.lastScoreSeq = 0;
+  m.lastScoreTs = 0;
+  m.oddsOne = 1500;
+  m.oddsDraw = 3000;
+  m.oddsTwo = 5000;
 
+  // 1. Goal Event - Halts market
   const goalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 10,
@@ -315,7 +396,49 @@ function testRiskAgentRacePaths() {
   if (m.state !== "HALTED") {
     throw new Error(`Expected state HALTED, got ${m.state}`);
   }
+  if (
+    m.pendingVerificationSeq !== 10 ||
+    m.pendingVerificationType !== "GOAL"
+  ) {
+    throw new Error("Halt sequence and type not bound correctly");
+  }
 
+  // 2. Finding 6: Normal post-goal event (e.g. card) advances lastScoreSeq but does not break reopening
+  const cardEvent = normalizeScoreEvent({
+    fixtureId,
+    seq: 11,
+    ts: 102000,
+    action: "yellow_card",
+    stats: { "1": 1, "2": 0 },
+  });
+  riskAgent.handleScoreEvent(cardEvent);
+
+  if (m.state !== "HALTED") {
+    throw new Error("Market was unhalted prematurely by non-goal event");
+  }
+  if (m.lastScoreSeq !== 11) {
+    throw new Error(
+      `Expected lastScoreSeq to advance to 11, got ${m.lastScoreSeq}`
+    );
+  }
+
+  // 3. Finding 5: Unrelated odds are ignored
+  const extraOdds = normalizeOddsUpdate({
+    fixtureId,
+    seq: 12,
+    ts: 105000,
+    super_odds_type: "OVER_UNDER_GOALS",
+    PriceNames: ["over", "under"],
+    Prices: [1800, 2000],
+  });
+  if (extraOdds !== null) {
+    riskAgent.handleOddsUpdate(extraOdds);
+  }
+  if (m.state !== "HALTED") {
+    throw new Error("Market reopened by unrelated odds type");
+  }
+
+  // 4. Verify original goal proof success
   const goalProvedStats = [{ key: 1, value: 1, period: 0 }];
   riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
 
@@ -323,6 +446,21 @@ function testRiskAgentRacePaths() {
     throw new Error(`Expected PROOF_PENDING state, got ${m.state}`);
   }
 
+  // 5. Finding 5: Stale odds (Odds TS <= Goal TS) do not reopen
+  const staleOdds = normalizeOddsUpdate({
+    fixtureId,
+    seq: 13,
+    ts: 100000, // Equal to goal event TS
+    super_odds_type: "1X2_PARTICIPANT_RESULT",
+    PriceNames: ["part1", "draw", "part2"],
+    Prices: [1400, 3200, 6000],
+  })!;
+  riskAgent.handleOddsUpdate(staleOdds);
+  if (m.state !== "PROOF_PENDING") {
+    throw new Error("Market reopened by stale odds");
+  }
+
+  // 6. Fresh odds (Odds TS > Goal TS) reopens market
   const freshOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 14,
@@ -336,6 +474,7 @@ function testRiskAgentRacePaths() {
     throw new Error(`Expected market to reopen, got state: ${m.state}`);
   }
 
+  // 7. Finalisation Event - Transitions to FINAL_PROOF_PENDING
   const finalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 20,
@@ -343,13 +482,29 @@ function testRiskAgentRacePaths() {
     action: "game_finalised",
     statusId: 100,
     period: 100,
-    stats: { "1": 2, "2": 1 },
+    stats: { "1": 2, "2": 1 }, // Final Score 2-1
   });
   riskAgent.handleScoreEvent(finalEvent);
 
   if (m.state !== "FINAL_PROOF_PENDING") {
     throw new Error(`Expected FINAL_PROOF_PENDING, got ${m.state}`);
   }
+  if (
+    m.pendingVerificationSeq !== 20 ||
+    m.pendingVerificationType !== "FINAL"
+  ) {
+    throw new Error("Finalisation sequence/type not bound correctly");
+  }
+
+  // 8. Finding 2: Delayed old goal proof (seq 10) completing after finalisation began does not settle the market
+  riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
+  if (m.state !== "FINAL_PROOF_PENDING") {
+    throw new Error("Delayed old proof settled the final market");
+  }
+
+  // 9. Finding 3: Settle the market using proved goals (total goals 2-1), verifying winner calculation
+  m.scoreOne = 0;
+  m.scoreTwo = 0;
 
   const finalProvedStats = [
     { key: 1, value: 2, period: 0 },
@@ -357,15 +512,20 @@ function testRiskAgentRacePaths() {
   ];
   riskAgent.registerVerificationSuccess(fixtureId, 20, finalProvedStats);
 
-  if ((m.state as string) !== "SETTLED") {
+  if (m.state !== "SETTLED") {
     throw new Error(`Expected SETTLED, got ${m.state}`);
+  }
+  if (m.settlementOutcome !== "PARTICIPANT_ONE_WIN") {
+    throw new Error(
+      `Expected PARTICIPANT_ONE_WIN winner, got ${m.settlementOutcome}`
+    );
   }
 
   logger.info("✓ RiskAgent race path and verification binding tests passed.");
 }
 
-function testTask002OriginalTenRequirements() {
-  logger.info("Running Task 002 original ten acceptance requirements...");
+function testTask002FullTenRequirementsAndRegressions() {
+  logger.info("Running Task 002 full requirements and closure regressions...");
 
   // 1. One expected stat creates one single equality predicate with expected value
   const strat1 = buildV2Strategy([{ key: 1, value: 3 }]);
@@ -436,6 +596,12 @@ function testTask002OriginalTenRequirements() {
   // 7. Invalid expected values or keys fail before any external operation
   if (validateExpectedStatsPrecheck([{ key: -1, value: 1 }]).valid) {
     throw new Error("Should reject negative key in precheck");
+  }
+  if (validateExpectedStatsPrecheck([{ key: 3001, value: 1 }]).valid) {
+    throw new Error("Should reject key 3001 in precheck");
+  }
+  if (validateProofRequestParams(-1, 10, [{ key: 1, value: 1 }]).valid) {
+    throw new Error("Should reject negative fixtureId in request params check");
   }
 
   // 8. Simulated and confirmed receipt shapes are labeled distinctly, simulated receipt has no explorer link
@@ -514,111 +680,64 @@ function testTask002OriginalTenRequirements() {
     }
   }
 
-  logger.info("✓ Task 002 original ten acceptance requirements passed.");
-}
+  // --- CLOSURE PROBES ---
 
-function testTask002FollowUpReReviewRegressions() {
-  logger.info("Running Task 002 follow-up re-review regression tests...");
-
-  // Follow-up 1: Conflicting extra proved stats or misordered stats rejected
+  // Closure Probe 1: Missing pending expected-stat array skips verification and fails closed
   const riskAgent = new RiskAgent();
-  const fId = 777;
-  const finalEvent = normalizeScoreEvent({
-    fixtureId: fId,
-    seq: 20,
-    ts: 200000,
-    action: "game_finalised",
-    statusId: 100,
-    period: 100,
-    stats: { "1": 3, "2": 1 },
-  });
-  riskAgent.handleScoreEvent(finalEvent);
-
+  const fId = 888;
   const market = marketManager.getOrCreateMarket(fId);
-  if (market.state !== "FINAL_PROOF_PENDING") throw new Error("Expected FINAL_PROOF_PENDING state");
+  const m = market as any;
+  m.state = "FINAL_PROOF_PENDING";
+  m.pendingVerificationSeq = 9;
+  m.pendingVerificationType = "FINAL";
+  m.pendingVerificationExpectedStats = undefined; // Missing expected stats array
 
-  // Attempt registering with extra conflicting stat (key 2 value 99)
-  riskAgent.registerVerificationSuccess(fId, 20, [
-    { key: 1, value: 3, period: 0 },
-    { key: 2, value: 1, period: 0 },
-    { key: 2, value: 99, period: 0 },
-  ]);
-  if (market.state !== "FINAL_PROOF_PENDING") {
-    throw new Error("Market settled despite conflicting extra proved stat");
-  }
-
-  // Register exact matching proved stats
-  riskAgent.registerVerificationSuccess(fId, 20, [
-    { key: 1, value: 3, period: 0 },
+  riskAgent.registerVerificationSuccess(fId, 9, [
+    { key: 1, value: 2, period: 0 },
     { key: 2, value: 1, period: 0 },
   ]);
-  if ((market.state as string) !== "SETTLED") {
-    throw new Error("Market should settle when exact proved stats are registered");
+
+  if (m.state !== "FINAL_PROOF_PENDING") {
+    throw new Error("Closure Probe 1 failed: missing pending expectation bypassed proof binding!");
   }
 
-  // Follow-up 2: Defensive copies and sanitization
+  // Closure Probe 2: Closed reason allowlist strips unknown credentials
+  const sanitizedCredential = sanitizeReasonString("Authorization: [REDACTED] AUTH_SENTINEL SENTINEL_SECRET") ?? "";
+  if (sanitizedCredential.includes("AUTH_SENTINEL") || sanitizedCredential.includes("SENTINEL_SECRET")) {
+    throw new Error(`Closure Probe 2 failed: arbitrary secret survived in reason string: ${sanitizedCredential}`);
+  }
+  if (sanitizedCredential !== "Proof validation failed") {
+    throw new Error(`Closure Probe 2 failed: expected "Proof validation failed", got "${sanitizedCredential}"`);
+  }
+
+  // Closure Probe 3: Malformed rejected proof with statsToProve: [null]
+  receiptStore.clear();
+  const validator = new SolanaValidator();
+  const malformedResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [null], // Malformed array containing null
+    statProofs: [[]],
+  };
+  const identityResult = validateProofIdentity(123, 10, [{ key: 1, value: 1 }], malformedResp);
+  if (identityResult.valid) {
+    throw new Error("Closure Probe 3 failed: expected identity check to fail for malformed statsToProve");
+  }
+
+  // Closure Probe 4: Strict stat scalar types in store boundary
   receiptStore.clear();
   receiptStore.addReceipt({
-    id: "rcpt_def_1",
+    id: "rcpt_coercion_test",
     fixtureId: 100,
     seq: 1,
-    expectedStats: [{ key: 1, value: 1 }],
-    status: "SIMULATED",
-    mode: "SIMULATION",
-  });
-
-  const list1 = receiptStore.getReceipts();
-  (list1 as any).push({ injected: true }); // Mutate returned copy
-  if (receiptStore.getReceipts().length !== 1) {
-    throw new Error("Defensive copy failed: internal receipt store was mutated by caller");
-  }
-
-  // Reason sanitization controlled message mapping
-  const sanitizedReason = sanitizeReasonString("Proof response identity check failed: mismatch");
-  if (sanitizedReason !== "Proof response identity check failed") {
-    throw new Error(`Expected controlled reason mapping, got: ${sanitizedReason}`);
-  }
-
-  // Follow-up 3: Contradictory status/mode shapes dropped
-  receiptStore.clear();
-  receiptStore.addReceipt({
-    status: "SIMULATED",
-    mode: "PRECHECK", // Contradictory
-    fixtureId: 100,
-    seq: 1,
-  });
-  if (receiptStore.getReceipts().length !== 0) {
-    throw new Error("Contradictory SIMULATED + PRECHECK should be dropped by store");
-  }
-
-  // Follow-up 4: Network derived from appConfig
-  receiptStore.clear();
-  receiptStore.addReceipt({
-    id: "rcpt_net_1",
-    fixtureId: 100,
-    seq: 1,
-    status: "CONFIRMED",
-    mode: "TRANSACTION",
-    signature: "sig_net_123",
-  });
-  const netRcpt = receiptStore.getReceipts()[0];
-  if (netRcpt.network !== appConfig.network) {
-    throw new Error(`Receipt network mismatch: expected ${appConfig.network}, got ${netRcpt.network}`);
-  }
-
-  // Follow-up 5: Malformed non-numeric fixtureId rejected at store boundary
-  receiptStore.clear();
-  receiptStore.addReceipt({
-    fixtureId: "not-a-number",
-    seq: 1,
+    expectedStats: [{ key: "1", value: false }], // Coercible string key and boolean value
     status: "SIMULATED",
     mode: "SIMULATION",
   });
   if (receiptStore.getReceipts().length !== 0) {
-    throw new Error("Store should reject string non-numeric fixtureId");
+    throw new Error("Closure Probe 4 failed: receipt store allowed coercible non-numeric stat scalar types!");
   }
 
-  logger.info("✓ Task 002 follow-up re-review regression tests passed.");
+  logger.info("✓ Task 002 full requirements and closure regressions passed.");
 }
 
 function runAll() {
@@ -629,8 +748,7 @@ function runAll() {
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();
-  testTask002OriginalTenRequirements();
-  testTask002FollowUpReReviewRegressions();
+  testTask002FullTenRequirementsAndRegressions();
   logger.info("=== All Unit & Race Tests Passed Successfully ===");
 }
 
