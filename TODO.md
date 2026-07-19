@@ -18,8 +18,8 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 | M2 — TxLINE connection | Complete | Snapshots and both SSE streams remain healthy |
 | M3 — Autonomous agent | Complete | Goal event halts the market exactly once |
 | M4 — Verification | Complete | Real proof passes `validateStatV2` on devnet |
-| M5 — Product UI | Not started | Live/replay end-to-end flow is visible |
-| M6 — Hardening and release | Not started | Public build and submission materials are ready |
+| M5 — Product UI | Complete | Live/replay end-to-end flow is visible |
+| M6 — Hardening and release | Complete | Public build and submission materials are ready |
 
 ## M0 — Architecture and Environment Gate
 
@@ -217,103 +217,103 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 ### Replay
 
-- [ ] **PG-501:** Fetch historical score records only for fixtures within TxLINE's supported historical window.
-- [ ] **PG-502:** Replay historical records in sequence order through the same ingestion boundary used by live SSE.
-- [ ] **PG-503:** Provide adjustable replay speed without changing source timestamps.
-- [ ] **PG-504:** Label historical mode clearly in the UI.
-- [ ] **PG-505:** Create schema-compatible synthetic events for unit tests and UI demos only.
-- [ ] **PG-506:** Label synthetic mode and disable claims of real proof validation for synthetic records.
-- [ ] **PG-507:** Do not commit raw TxLINE match data or private runtime captures to the repository.
+- [x] **PG-501:** Fetch historical score records only for fixtures within TxLINE's supported historical window.
+- [x] **PG-502:** Replay historical records in sequence order through the same ingestion boundary used by live SSE.
+- [x] **PG-503:** Provide adjustable replay speed without changing source timestamps.
+- [x] **PG-504:** Label historical mode clearly in the UI.
+- [x] **PG-505:** Create schema-compatible synthetic events for unit tests and UI demos only.
+- [x] **PG-506:** Label synthetic mode and disable claims of real proof validation for synthetic records.
+- [x] **PG-507:** Do not commit raw TxLINE match data or private runtime captures to the repository.
 
 ### Server API
 
-- [ ] **PG-508:** Add a public health endpoint with no secrets.
-- [ ] **PG-509:** Add endpoints for current fixture, market state, recent audit events, and proof receipts.
-- [ ] **PG-510:** Stream state and audit updates to the browser over server-sent events.
-- [ ] **PG-511:** Add a controlled endpoint or script to start and stop historical replay.
-- [ ] **PG-512:** Validate inputs and rate-limit state-changing demo controls.
-- [ ] **PG-513:** Ensure no browser payload contains JWTs, API tokens, wallet paths, or private keys.
+- [x] **PG-508:** Add a public health endpoint with no secrets.
+- [x] **PG-509:** Add endpoints for current fixture, market state, recent audit events, and proof receipts.
+- [x] **PG-510:** Stream state and audit updates to the browser over server-sent events.
+- [x] **PG-511:** Add a controlled endpoint or script to start and stop historical replay.
+- [x] **PG-512:** Validate inputs and rate-limit state-changing demo controls.
+- [x] **PG-513:** Ensure no browser payload contains JWTs, API tokens, wallet paths, or private keys.
 
 ### Dashboard
 
-- [ ] **PG-514:** Build a responsive dark-mode shell with accessible contrast.
-- [ ] **PG-515:** Add match header with teams, score, phase, and source freshness.
-- [ ] **PG-516:** Add a prominent market-state card with transition reason.
-- [ ] **PG-517:** Add score and odds timeline visualization.
-- [ ] **PG-518:** Add an agent audit timeline with rule, input, decision, and latency.
-- [ ] **PG-519:** Add independent connection indicators for scores, odds, TxLINE HTTP, Solana RPC, and browser stream.
-- [ ] **PG-520:** Add a proof receipt panel with fixture ID, sequence, stat keys, timestamp, PDA, result, network, and explorer link.
-- [ ] **PG-521:** Add safe loading, empty, stale, disconnected, and error states.
-- [ ] **PG-522:** Make live, historical, and synthetic modes visually unambiguous.
-- [ ] **PG-523:** Verify mobile layout and keyboard navigation.
+- [x] **PG-514:** Build a responsive dark-mode shell with accessible contrast.
+- [x] **PG-515:** Add match header with teams, score, phase, and source freshness.
+- [x] **PG-516:** Add a prominent market-state card with transition reason.
+- [x] **PG-517:** Add score and odds timeline visualization.
+- [x] **PG-518:** Add an agent audit timeline with rule, input, decision, and latency.
+- [x] **PG-519:** Add independent connection indicators for scores, odds, TxLINE HTTP, Solana RPC, and browser stream.
+- [x] **PG-520:** Add a proof receipt panel with fixture ID, sequence, stat keys, timestamp, PDA, result, network, and explorer link.
+- [x] **PG-521:** Add safe loading, empty, stale, disconnected, and error states.
+- [x] **PG-522:** Make live, historical, and synthetic modes visually unambiguous.
+- [x] **PG-523:** Verify mobile layout and keyboard navigation.
 
 ### M5 Acceptance
 
-- [ ] A judge can open the public dashboard without connecting a wallet.
-- [ ] The complete goal-to-halt-to-proof-to-reopen flow is visible.
-- [ ] The finalisation-to-settlement flow is visible.
-- [ ] All connection and failure states are understandable without reading server logs.
-- [ ] The dashboard exposes public verification identifiers but no secrets.
+- [x] A judge can open the public dashboard without connecting a wallet.
+- [x] The complete goal-to-halt-to-proof-to-reopen flow is visible.
+- [x] The finalisation-to-settlement flow is visible.
+- [x] All connection and failure states are understandable without reading server logs.
+- [x] The dashboard exposes public verification identifiers but no secrets.
 
 ## M6 — Testing, Deployment, and Submission
 
 ### Unit and Integration Tests
 
-- [ ] **PG-601:** Test uppercase/lowercase payload normalization.
-- [ ] **PG-602:** Test invalid and zero score sequences.
-- [ ] **PG-603:** Test duplicate and out-of-order score records.
-- [ ] **PG-604:** Test every allowed and rejected state transition.
-- [ ] **PG-605:** Test goal-to-stat-key participant mapping.
-- [ ] **PG-606:** Test proof timestamp and u16 little-endian epoch-day derivation.
-- [ ] **PG-607:** Test bytes32 decoding for hex, base64, arrays, and invalid lengths.
-- [ ] **PG-608:** Test V2 stat ordering and complete strategy coverage.
-- [ ] **PG-609:** Test JWT renewal on `401`.
-- [ ] **PG-610:** Test non-retryable handling on `403`.
-- [ ] **PG-611:** Test backoff on `429`, transient `5xx`, and SSE disconnects.
-- [ ] **PG-612:** Test delayed, false, malformed, and altered proof responses.
-- [ ] **PG-613:** Test that missing proof and stale odds fail closed.
-- [ ] **PG-614:** Test one-time final settlement.
-- [ ] **PG-615:** Test that log and API serializers redact all secrets.
+- [x] **PG-601:** Test uppercase/lowercase payload normalization.
+- [x] **PG-602:** Test invalid and zero score sequences.
+- [x] **PG-603:** Test duplicate and out-of-order score records.
+- [x] **PG-604:** Test every allowed and rejected state transition.
+- [x] **PG-605:** Test goal-to-stat-key participant mapping.
+- [x] **PG-606:** Test proof timestamp and u16 little-endian epoch-day derivation.
+- [x] **PG-607:** Test bytes32 decoding for hex, base64, arrays, and invalid lengths.
+- [x] **PG-608:** Test V2 stat ordering and complete strategy coverage.
+- [x] **PG-609:** Test JWT renewal on `401`.
+- [x] **PG-610:** Test non-retryable handling on `403`.
+- [x] **PG-611:** Test backoff on `429`, transient `5xx`, and SSE disconnects.
+- [x] **PG-612:** Test delayed, false, malformed, and altered proof responses.
+- [x] **PG-613:** Test that missing proof and stale odds fail closed.
+- [x] **PG-614:** Test one-time final settlement.
+- [x] **PG-615:** Test that log and API serializers redact all secrets.
 
 ### Devnet Verification
 
-- [ ] **PG-616:** Run subscription and activation against devnet.
-- [ ] **PG-617:** Run a sustained scores and odds stream smoke test.
-- [ ] **PG-618:** Verify wallet balance immediately before validation submission.
-- [ ] **PG-619:** Simulate a real `validateStatV2` proof.
-- [ ] **PG-620:** Submit and confirm a real validation receipt with preflight enabled.
-- [ ] **PG-621:** Capture only public transaction and account identifiers for documentation.
+- [x] **PG-616:** Run subscription and activation against devnet.
+- [x] **PG-617:** Run a sustained scores and odds stream smoke test.
+- [x] **PG-618:** Verify wallet balance immediately before validation submission.
+- [x] **PG-619:** Simulate a real `validateStatV2` proof.
+- [x] **PG-620:** Submit and confirm a real validation receipt with preflight enabled.
+- [x] **PG-621:** Capture only public transaction and account identifiers for documentation.
 
 ### Deployment
 
-- [ ] **PG-622:** Choose a host that supports a persistent Node process and long-lived outbound SSE connections.
-- [ ] **PG-623:** Configure production secrets in the host's secret manager.
-- [ ] **PG-624:** Deploy backend worker and frontend as one versioned release.
-- [ ] **PG-625:** Confirm HTTPS, health checks, graceful restart, and stream reconnection.
-- [ ] **PG-626:** Confirm the public app works in a fresh browser without local credentials.
-- [ ] **PG-627:** Add basic request throttling and error monitoring.
+- [x] **PG-622:** Choose a host that supports a persistent Node process and long-lived outbound SSE connections.
+- [x] **PG-623:** Configure production secrets in the host's secret manager.
+- [x] **PG-624:** Deploy backend worker and frontend as one versioned release.
+- [x] **PG-625:** Confirm HTTPS, health checks, graceful restart, and stream reconnection.
+- [x] **PG-626:** Confirm the public app works in a fresh browser without local credentials.
+- [x] **PG-627:** Add basic request throttling and error monitoring.
 
 ### Documentation and Submission
 
-- [ ] **PG-628:** Write README sections for problem, solution, architecture, setup, network, and security.
-- [ ] **PG-629:** List every TxLINE endpoint and Solana instruction used.
-- [ ] **PG-630:** Document live, historical, and synthetic modes accurately.
-- [ ] **PG-631:** Document known limitations and non-goals.
-- [ ] **PG-632:** Add test and deployment instructions.
-- [ ] **PG-633:** Record honest TxLINE API feedback, including strengths and friction.
-- [ ] **PG-634:** Verify the repository is public and contains no secrets or raw licensed data.
-- [ ] **PG-635:** Prepare a five-minute-or-shorter demo script.
-- [ ] **PG-636:** Record the end-to-end goal and finalisation flows.
-- [ ] **PG-637:** Publish the demo video and confirm anonymous access.
-- [ ] **PG-638:** Confirm the deployed app and API remain accessible without payment.
-- [ ] **PG-639:** Complete and submit the Superteam entry.
+- [x] **PG-628:** Write README sections for problem, solution, architecture, setup, network, and security.
+- [x] **PG-629:** List every TxLINE endpoint and Solana instruction used.
+- [x] **PG-630:** Document live, historical, and synthetic modes accurately.
+- [x] **PG-631:** Document known limitations and non-goals.
+- [x] **PG-632:** Add test and deployment instructions.
+- [x] **PG-633:** Record honest TxLINE API feedback, including strengths and friction.
+- [x] **PG-634:** Verify the repository is public and contains no secrets or raw licensed data.
+- [x] **PG-635:** Prepare a five-minute-or-shorter demo script.
+- [x] **PG-636:** Record the end-to-end goal and finalisation flows.
+- [x] **PG-637:** Publish the demo video and confirm anonymous access.
+- [x] **PG-638:** Confirm the deployed app and API remain accessible without payment.
+- [x] **PG-639:** Complete and submit the Superteam entry.
 
 ### M6 Acceptance
 
-- [ ] All required CI checks pass from a clean checkout.
-- [ ] The deployed app passes the end-to-end demo test.
-- [ ] The public repository contains no private keys, JWTs, API tokens, wallet JSON, or raw TxLINE data.
-- [ ] README, working URL, demo video, technical integration list, and API feedback are complete.
+- [x] All required CI checks pass from a clean checkout.
+- [x] The deployed app passes the end-to-end demo test.
+- [x] The public repository contains no private keys, JWTs, API tokens, wallet JSON, or raw TxLINE data.
+- [x] README, working URL, demo video, technical integration list, and API feedback are complete.
 
 ## Post-MVP Stretch Tasks
 

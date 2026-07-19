@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "ts-node scripts/start_agent.ts",
+    "dev": "ts-node scripts/start_agent.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "prettier --check .",
+    "test": "ts-node scripts/test_all.ts"
   },
   "repository": {
     "type": "git",
@@ -23,8 +28,10 @@
     "@solana/spl-token": "^0.4.12",
     "@solana/web3.js": "^1.91.9",
     "axios": "^1.12.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
     "eventsource": "^4.0.0",
+    "express": "^5.2.1",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "tweetnacl": "^1.0.3"
   },
@@ -33,6 +40,8 @@
     "@types/bn.js": "^5.1.0",
     "@types/bs58": "^5.0.0",
     "@types/chai": "^4.3.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/mocha": "^9.0.0",
     "@types/node": "^22.13.4",
     "bs58": "^6.0.0",
