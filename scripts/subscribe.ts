@@ -17,7 +17,9 @@ async function subscribe() {
   logger.info(`Wallet Balance: ${balance / 1e9} SOL`);
 
   if (balance === 0) {
-    logger.warn("Wallet has 0 SOL. Please request devnet SOL manually from https://faucet.solana.com/");
+    logger.warn(
+      "Wallet has 0 SOL. Please request devnet SOL manually from https://faucet.solana.com/"
+    );
     return;
   }
 
@@ -51,7 +53,9 @@ async function subscribe() {
   );
   logger.info(`Derived userTokenAccount: ${userTokenAccount.toBase58()}`);
 
-  const userTokenAccountInfo = await connection.getAccountInfo(userTokenAccount);
+  const userTokenAccountInfo = await connection.getAccountInfo(
+    userTokenAccount
+  );
   if (!userTokenAccountInfo) {
     logger.info("User TxL token account is not initialized. Creating it...");
     const createAtaTx = new Transaction().add(
@@ -64,7 +68,9 @@ async function subscribe() {
         ASSOCIATED_TOKEN_PROGRAM_ID
       )
     );
-    const signature = await connection.sendTransaction(createAtaTx, [walletKeypair]);
+    const signature = await connection.sendTransaction(createAtaTx, [
+      walletKeypair,
+    ]);
     logger.info(`ATA creation transaction sent: ${signature}`);
     await connection.confirmTransaction(signature, "confirmed");
     logger.info("✓ Associated Token Account created successfully!");
@@ -73,7 +79,9 @@ async function subscribe() {
   const serviceLevelId = appConfig.serviceLevelId;
   const durationWeeks = 4;
 
-  logger.info(`Subscribing to Service Level: ${serviceLevelId} for ${durationWeeks} weeks...`);
+  logger.info(
+    `Subscribing to Service Level: ${serviceLevelId} for ${durationWeeks} weeks...`
+  );
 
   const methodBuilder = program.methods
     .subscribe(serviceLevelId, durationWeeks)
@@ -94,7 +102,10 @@ async function subscribe() {
     const simulation = await methodBuilder.simulate();
     logger.info("Simulation succeeded!");
   } catch (err: any) {
-    logger.error("Simulation failed! Check if matrix account or token account is initialized.", err);
+    logger.error(
+      "Simulation failed! Check if matrix account or token account is initialized.",
+      err
+    );
     console.log("Simulation error details:", err);
     return;
   }
@@ -104,7 +115,9 @@ async function subscribe() {
     const txSig = await methodBuilder.rpc();
     logger.info(`✓ Subscription transaction successful! Signature: ${txSig}`);
     console.log(`\n======================================================`);
-    console.log(`Save this signature. You will need it to activate API access:`);
+    console.log(
+      `Save this signature. You will need it to activate API access:`
+    );
     console.log(`Signature: ${txSig}`);
     console.log(`======================================================\n`);
   } catch (err: any) {

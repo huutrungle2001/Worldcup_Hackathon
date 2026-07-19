@@ -19,10 +19,13 @@ if (fs.existsSync(walletPath)) {
 
 const keypair = Keypair.generate();
 const secretKey = Array.from(keypair.secretKey);
-fs.writeFileSync(walletPath, JSON.stringify(secretKey));
+fs.writeFileSync(walletPath, JSON.stringify(secretKey), { mode: 0o600 });
+fs.chmodSync(walletPath, 0o600);
 
 console.log(`New wallet generated successfully!`);
 console.log(`Saved to: ${walletPath}`);
 console.log(`Address: ${keypair.publicKey.toBase58()}`);
 console.log(`\nTo get devnet SOL:`);
-console.log(`Visit: https://faucet.solana.com/ and request SOL for the address above.`);
+console.log(
+  `Visit: https://faucet.solana.com/ and request SOL for the address above.`
+);

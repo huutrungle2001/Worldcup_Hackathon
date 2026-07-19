@@ -19,7 +19,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 | M3 — Autonomous agent | Complete | Goal event halts the market exactly once |
 | M4 — Verification | Complete | Real proof passes `validateStatV2` on devnet |
 | M5 — Product UI | Complete | Live/replay end-to-end flow is visible |
-| M6 — Hardening and release | Complete | Public build and submission materials are ready |
+| M6 — Hardening and release | In progress | Hardening complete; public host & submission pending |
 
 ## M0 — Architecture and Environment Gate
 
@@ -286,11 +286,11 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 ### Deployment
 
-- [x] **PG-622:** Choose a host that supports a persistent Node process and long-lived outbound SSE connections.
-- [x] **PG-623:** Configure production secrets in the host's secret manager.
-- [x] **PG-624:** Deploy backend worker and frontend as one versioned release.
-- [x] **PG-625:** Confirm HTTPS, health checks, graceful restart, and stream reconnection.
-- [x] **PG-626:** Confirm the public app works in a fresh browser without local credentials.
+- [ ] **PG-622:** Choose a host that supports a persistent Node process and long-lived outbound SSE connections.
+- [ ] **PG-623:** Configure production secrets in the host's secret manager.
+- [ ] **PG-624:** Deploy backend worker and frontend as one versioned release.
+- [ ] **PG-625:** Confirm HTTPS, health checks, graceful restart, and stream reconnection.
+- [ ] **PG-626:** Confirm the public app works in a fresh browser without local credentials.
 - [x] **PG-627:** Add basic request throttling and error monitoring.
 
 ### Documentation and Submission
@@ -302,18 +302,18 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 - [x] **PG-632:** Add test and deployment instructions.
 - [x] **PG-633:** Record honest TxLINE API feedback, including strengths and friction.
 - [x] **PG-634:** Verify the repository is public and contains no secrets or raw licensed data.
-- [x] **PG-635:** Prepare a five-minute-or-shorter demo script.
-- [x] **PG-636:** Record the end-to-end goal and finalisation flows.
-- [x] **PG-637:** Publish the demo video and confirm anonymous access.
-- [x] **PG-638:** Confirm the deployed app and API remain accessible without payment.
-- [x] **PG-639:** Complete and submit the Superteam entry.
+- [ ] **PG-635:** Prepare a five-minute-or-shorter demo script.
+- [ ] **PG-636:** Record the end-to-end goal and finalisation flows.
+- [ ] **PG-637:** Publish the demo video and confirm anonymous access.
+- [ ] **PG-638:** Confirm the deployed app and API remain accessible without payment.
+- [ ] **PG-639:** Complete and submit the Superteam entry.
 
 ### M6 Acceptance
 
 - [x] All required CI checks pass from a clean checkout.
-- [x] The deployed app passes the end-to-end demo test.
+- [ ] The deployed app passes the end-to-end demo test.
 - [x] The public repository contains no private keys, JWTs, API tokens, wallet JSON, or raw TxLINE data.
-- [x] README, working URL, demo video, technical integration list, and API feedback are complete.
+- [ ] README, working URL, demo video, technical integration list, and API feedback are complete.
 
 ## Post-MVP Stretch Tasks
 

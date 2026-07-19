@@ -35,14 +35,23 @@ export interface NormalizedOddsUpdate {
   oddsOne: number;
   oddsDraw: number;
   oddsTwo: number;
+  oddsType: string;
   ingestedAt: string;
 }
 
 export function normalizeFixture(raw: any): NormalizedFixture {
   return {
     fixtureId: Number(raw.fixtureId ?? raw.FixtureId),
-    participantOneName: raw.participantOneName ?? raw.ParticipantOneName ?? "",
-    participantTwoName: raw.participantTwoName ?? raw.ParticipantTwoName ?? "",
+    participantOneName:
+      raw.Participant1 ??
+      raw.participantOneName ??
+      raw.ParticipantOneName ??
+      "",
+    participantTwoName:
+      raw.Participant2 ??
+      raw.participantTwoName ??
+      raw.ParticipantTwoName ??
+      "",
     gameStateId: Number(raw.gameState ?? raw.GameState ?? 1),
     gameStateName: raw.gameStateName ?? raw.GameStateName ?? "Scheduled",
     sportId: Number(raw.sportId ?? raw.SportId ?? 1),
@@ -56,7 +65,7 @@ export function normalizeFixture(raw: any): NormalizedFixture {
 export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
   const fixtureId = Number(raw.fixtureId ?? raw.FixtureId);
   const seq = Number(raw.seq ?? raw.Seq);
-  
+
   if (isNaN(fixtureId) || fixtureId <= 0) {
     throw new Error(`Invalid fixture ID: ${raw.fixtureId}`);
   }
@@ -67,6 +76,22 @@ export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
   const action = raw.action ?? raw.Action ?? "";
   const eventKey = `${fixtureId}:${seq}:${action}`;
 
+  // Robustly extract goals from Stats dictionary (Finding 1)
+  const stats = raw.Stats ?? raw.stats ?? {};
+  const getStatValue = (key: string): number => {
+    const entry = stats[key];
+    if (entry === undefined || entry === null) return 0;
+    if (typeof entry === "object") {
+      return Number(entry.value ?? entry.Value ?? 0);
+    }
+    return Number(entry);
+  };
+
+  const scoreOne =
+    getStatValue("1") || Number(raw.scoreOne ?? raw.ScoreOne ?? 0);
+  const scoreTwo =
+    getStatValue("2") || Number(raw.scoreTwo ?? raw.ScoreTwo ?? 0);
+
   return {
     fixtureId,
     seq,
@@ -75,11 +100,12 @@ export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
     period: Number(raw.period ?? raw.Period ?? 0),
     statusId: Number(raw.statusId ?? raw.StatusId ?? 0),
     action,
-    scoreOne: Number(raw.scoreOne ?? raw.ScoreOne ?? 0),
-    scoreTwo: Number(raw.scoreTwo ?? raw.ScoreTwo ?? 0),
+    scoreOne,
+    scoreTwo,
     statKey: raw.statKey !== undefined ? Number(raw.statKey) : undefined,
     statValue: raw.statValue !== undefined ? Number(raw.statValue) : undefined,
-    participantId: raw.participantId !== undefined ? Number(raw.participantId) : undefined,
+    participantId:
+      raw.participantId !== undefined ? Number(raw.participantId) : undefined,
     ingestedAt: new Date().toISOString(),
     eventKey,
   };
@@ -93,14 +119,45 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate {
     throw new Error(`Invalid fixture ID: ${raw.fixtureId}`);
   }
 
+  const oddsType =
+    raw.super_odds_type ?? raw.superOddsType ?? raw.SuperOddsType ?? "";
+
   let oddsOne = 0;
   let oddsDraw = 0;
   let oddsTwo = 0;
 
-  if (raw.outcomes) {
-    const o1 = raw.outcomes.find((o: any) => o.type === 1 || o.outcomeType === 1);
-    const oX = raw.outcomes.find((o: any) => o.type === 2 || o.outcomeType === 2 || o.type === "X" || o.outcomeType === "X");
-    const o2 = raw.outcomes.find((o: any) => o.type === 3 || o.outcomeType === 3);
+  // Extract from PriceNames/Prices (Finding 1)
+  const priceNames = raw.PriceNames ?? raw.priceNames ?? [];
+  const prices = raw.Prices ?? raw.prices ?? [];
+
+  if (priceNames.length > 0 && prices.length > 0) {
+    const idx1 = priceNames.findIndex(
+      (name: string) => name === "part1" || name === "1" || name === "home"
+    );
+    const idxDraw = priceNames.findIndex(
+      (name: string) => name === "draw" || name === "X"
+    );
+    const idx2 = priceNames.findIndex(
+      (name: string) => name === "part2" || name === "2" || name === "away"
+    );
+
+    if (idx1 !== -1) oddsOne = Number(prices[idx1]);
+    if (idxDraw !== -1) oddsDraw = Number(prices[idxDraw]);
+    if (idx2 !== -1) oddsTwo = Number(prices[idx2]);
+  } else if (raw.outcomes) {
+    const o1 = raw.outcomes.find(
+      (o: any) => o.type === 1 || o.outcomeType === 1
+    );
+    const oX = raw.outcomes.find(
+      (o: any) =>
+        o.type === 2 ||
+        o.outcomeType === 2 ||
+        o.type === "X" ||
+        o.outcomeType === "X"
+    );
+    const o2 = raw.outcomes.find(
+      (o: any) => o.type === 3 || o.outcomeType === 3
+    );
 
     oddsOne = o1 ? Number(o1.odds ?? o1.price ?? 0) : 0;
     oddsDraw = oX ? Number(oX.odds ?? oX.price ?? 0) : 0;
@@ -118,6 +175,7 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate {
     oddsOne,
     oddsDraw,
     oddsTwo,
+    oddsType,
     ingestedAt: new Date().toISOString(),
   };
 }

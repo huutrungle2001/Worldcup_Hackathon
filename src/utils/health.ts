@@ -34,7 +34,8 @@ export class HealthMonitor {
     const current = this.health[service];
     this.health[service] = {
       status,
-      lastHeartbeat: status === "HEALTHY" ? new Date().toISOString() : current.lastHeartbeat,
+      lastHeartbeat:
+        status === "HEALTHY" ? new Date().toISOString() : current.lastHeartbeat,
       errorCount: error ? current.errorCount + 1 : current.errorCount,
       lastError: error || current.lastError,
     };

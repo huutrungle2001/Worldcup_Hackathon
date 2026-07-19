@@ -13,23 +13,23 @@ These specifications define how basketball game phases and statistics are encode
 
 ### Game Phase Encoding
 
-| Name  | ID  | Description             | Competition Type |
-|-------|-----|-------------------------|------------------|
-| NS    | 1   | Not started             | All              |
-| Q1    | 2   | Quarter 1               | NBA              |
-| Q1B   | 3   | Quarter 1 break         | NBA              |
-| Q2    | 4   | Quarter 2               | NBA              |
-| HT    | 5   | Halftime                | All              |
-| Q3    | 6   | Quarter 3               | NBA              |
-| Q3B   | 7   | Quarter 3 break         | NBA              |
-| Q4    | 8   | Quarter 4               | NBA              |
-| F     | 9   | Ended                   | All              |
-| WO    | 10  | Waiting for Overtime    | All              |
-| OT    | 11  | Overtime                | All              |
-| OB    | 12  | Overtime Break          | All              |
-| FO    | 13  | Ended after Overtime    | All              |
-| H1    | 19  | First half              | NCAA             |
-| H2    | 20  | Second half             | NCAA             |
+| Name | ID  | Description          | Competition Type |
+| ---- | --- | -------------------- | ---------------- |
+| NS   | 1   | Not started          | All              |
+| Q1   | 2   | Quarter 1            | NBA              |
+| Q1B  | 3   | Quarter 1 break      | NBA              |
+| Q2   | 4   | Quarter 2            | NBA              |
+| HT   | 5   | Halftime             | All              |
+| Q3   | 6   | Quarter 3            | NBA              |
+| Q3B  | 7   | Quarter 3 break      | NBA              |
+| Q4   | 8   | Quarter 4            | NBA              |
+| F    | 9   | Ended                | All              |
+| WO   | 10  | Waiting for Overtime | All              |
+| OT   | 11  | Overtime             | All              |
+| OB   | 12  | Overtime Break       | All              |
+| FO   | 13  | Ended after Overtime | All              |
+| H1   | 19  | First half           | NCAA             |
+| H2   | 20  | Second half          | NCAA             |
 
 ### Stat Period Encoding
 
@@ -39,8 +39,8 @@ These encodings are used for on-chain validation proofs and trading settlement.
 
 **Full Game Stats (Keys 1-36):**
 
-| Key | Statistic                          |
-|-----|------------------------------------|
+| Key | Statistic                                |
+| --- | ---------------------------------------- |
 | 1   | Participant 1 Total Score                |
 | 2   | Participant 2 Total Score                |
 | 3   | Participant 1 Total Fouls                |
@@ -79,6 +79,7 @@ These encodings are used for on-chain validation proofs and trading settlement.
 | 36  | Participant 2 Total Used timeouts        |
 
 **Period-Specific Stats** - Add period multiplier to base keys:
+
 - **First Half (H1)**: Add 1000
 - **Second Half (H2)**: Add 2000
 - **Quarter 1**: Add 10000

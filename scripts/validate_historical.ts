@@ -16,7 +16,9 @@ async function run() {
     const interval = Math.floor(checkTime.getUTCMinutes() / 5);
 
     try {
-      logger.info(`Checking updates for EpochDay: ${epochDay}, Hour: ${hourOfDay}, Interval: ${interval}...`);
+      logger.info(
+        `Checking updates for EpochDay: ${epochDay}, Hour: ${hourOfDay}, Interval: ${interval}...`
+      );
       const updates = await txLineClient.request<any[]>({
         url: `/scores/updates/${epochDay}/${hourOfDay}/${interval}`,
       });
@@ -26,7 +28,9 @@ async function run() {
         if (record) {
           targetFixtureId = record.FixtureId ?? record.fixtureId;
           targetSeq = record.Seq ?? record.seq;
-          logger.info(`✓ Found active update! Fixture: ${targetFixtureId}, Seq: ${targetSeq}`);
+          logger.info(
+            `✓ Found active update! Fixture: ${targetFixtureId}, Seq: ${targetSeq}`
+          );
           break;
         }
       }
@@ -36,17 +40,25 @@ async function run() {
   }
 
   if (targetFixtureId === 0) {
-    logger.warn("No recent score updates found. Checking active fixtures snapshots...");
+    logger.warn(
+      "No recent score updates found. Checking active fixtures snapshots..."
+    );
     try {
       const fixtures = await txLineClient.getFixtures();
       for (const f of fixtures) {
         const snapshot = await txLineClient.getScoresSnapshot(f.fixtureId);
-        if (snapshot && snapshot.scoreRecords && snapshot.scoreRecords.length > 0) {
+        if (
+          snapshot &&
+          snapshot.scoreRecords &&
+          snapshot.scoreRecords.length > 0
+        ) {
           const record = snapshot.scoreRecords.find((r: any) => r.seq > 0);
           if (record) {
             targetFixtureId = f.fixtureId;
             targetSeq = record.seq;
-            logger.info(`✓ Found score record in snapshot! Fixture: ${targetFixtureId}, Seq: ${targetSeq}`);
+            logger.info(
+              `✓ Found score record in snapshot! Fixture: ${targetFixtureId}, Seq: ${targetSeq}`
+            );
             break;
           }
         }
@@ -59,14 +71,23 @@ async function run() {
   if (targetFixtureId === 0) {
     targetFixtureId = 18175981;
     targetSeq = 991;
-    logger.info(`No live fixtures found. Using fallback historical fixture: ${targetFixtureId}, Seq: ${targetSeq}`);
+    logger.info(
+      `No live fixtures found. Using fallback historical fixture: ${targetFixtureId}, Seq: ${targetSeq}`
+    );
   }
 
   try {
     logger.info(`Running Merkle proof validation on Solana devnet...`);
-    const txSig = await solanaValidator.validateProofOnChain(targetFixtureId, targetSeq, ["1"], true);
+    const txSig = await solanaValidator.validateProofOnChain(
+      targetFixtureId,
+      targetSeq,
+      ["1"],
+      true
+    );
     if (txSig) {
-      logger.info(`✓ Verification process complete! Transaction signature or view result: ${txSig}`);
+      logger.info(
+        `✓ Verification process complete! Transaction signature or view result: ${txSig}`
+      );
     } else {
       logger.error("Verification process returned false.");
     }

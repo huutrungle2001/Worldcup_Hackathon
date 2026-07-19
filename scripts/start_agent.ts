@@ -32,7 +32,10 @@ async function main() {
         riskAgent.handleScoreEvent(normalized);
       }
     } catch (err: any) {
-      logger.error("Error processing scores stream event:", err, { event, data });
+      logger.error("Error processing scores stream event:", err, {
+        event,
+        data,
+      });
     }
   });
 

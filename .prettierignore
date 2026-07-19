@@ -1,0 +1,18 @@
+# Ignore third party packages
+node_modules
+dist
+.next
+dashboard/out
+dashboard/build
+
+# Ignore generated/mock artifacts
+idl
+types/txoracle.ts
+
+# Ignore secret/private files
+_keys
+.env
+.env.*
+*.json
+*.lock
+*.md

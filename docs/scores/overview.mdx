@@ -11,11 +11,11 @@ For on-chain validation, use [On-Chain Validation](/documentation/examples/oncha
 
 For final match outcome settlement, scores records with `action=game_finalised` use `statusId=100` and `period=100` on the current devnet and mainnet releases. That gives integrations a single final-outcome marker independent of whether the match ended in regulation, extra time, penalties, or abandonment.
 
-| Feed | What to use |
-|------|-------------|
-| Soccer | [Soccer Feed](/documentation/scores/soccer-feed) for World Cup-oriented stat keys and game phases |
+| Feed              | What to use                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Soccer            | [Soccer Feed](/documentation/scores/soccer-feed) for World Cup-oriented stat keys and game phases      |
 | American football | [American Football Feed](/documentation/scores/football-feed) for US football phase and stat encodings |
-| Basketball | [Basketball Feed](/documentation/scores/basketball-feed) for basketball phase and stat encodings |
+| Basketball        | [Basketball Feed](/documentation/scores/basketball-feed) for basketball phase and stat encodings       |
 
 ## Built for Settlement & Micro-Markets
 
@@ -29,16 +29,22 @@ This feed is built for applications that need deterministic event data and proof
 
 <CardGroup cols={3}>
   <Card title="Scout-Sourced Data" icon="stadium">
-    Direct-from-stadium collection removes broadcast lag and delay vulnerabilities.
+    Direct-from-stadium collection removes broadcast lag and delay
+    vulnerabilities.
   </Card>
   <Card title="Deterministic Architecture" icon="code">
-    Fixed-key encoding tailored for programmatic trade settlement and smart contracts.
+    Fixed-key encoding tailored for programmatic trade settlement and smart
+    contracts.
   </Card>
   <Card title="High-Availability Pipelines" icon="server">
-    Redundant infrastructure engineered for zero data loss during peak tournament events.
+    Redundant infrastructure engineered for zero data loss during peak
+    tournament events.
   </Card>
 </CardGroup>
 
 <Info>
-If a live stream is connected but no data messages arrive, there may be no covered fixture actively producing updates at that moment. Check the [Schedule](/documentation/scores/schedule), keep the stream open during live windows, or use historical endpoints for completed fixtures.
+  If a live stream is connected but no data messages arrive, there may be no
+  covered fixture actively producing updates at that moment. Check the
+  [Schedule](/documentation/scores/schedule), keep the stream open during live
+  windows, or use historical endpoints for completed fixtures.
 </Info>

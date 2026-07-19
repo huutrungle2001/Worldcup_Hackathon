@@ -8,7 +8,10 @@ description: "Access World Cup and International Friendlies data for free with T
 Experience the power of TxLINE's sports data API with our complimentary free tiers. Get access to World Cup and International Friendlies data with no TxL purchase, no credit card, and no commitment. Mainnet offers documented 60-second and real-time options; devnet service levels and sampling intervals follow its current on-chain pricing matrix.
 
 <Note>
-Free means no TxL subscription payment. You still need SOL on the selected Solana network to pay transaction fees and any account rent required by the on-chain `subscribe` transaction. On devnet, request devnet SOL before starting.
+  Free means no TxL subscription payment. You still need SOL on the selected
+  Solana network to pay transaction fees and any account rent required by the
+  on-chain `subscribe` transaction. On devnet, request devnet SOL before
+  starting.
 </Note>
 
 ## What's Included
@@ -25,12 +28,14 @@ Free means no TxL subscription payment. You still need SOL on the selected Solan
     Cryptographically verifiable data with Solana blockchain anchoring.
   </Card>
   <Card title="Production Ready" icon="rocket">
-    Same reliable infrastructure as our premium tiers with comprehensive documentation.
+    Same reliable infrastructure as our premium tiers with comprehensive
+    documentation.
   </Card>
 </CardGroup>
 
 <Info>
-**Perfect For**: Developers building proof-of-concepts, hobbyist projects, learning platforms, or testing TxLINE before a production rollout.
+  **Perfect For**: Developers building proof-of-concepts, hobbyist projects,
+  learning platforms, or testing TxLINE before a production rollout.
 </Info>
 
 ## Getting Started
@@ -39,10 +44,10 @@ Free means no TxL subscription payment. You still need SOL on the selected Solan
 
 Use the same network for every step: the Solana RPC, TxLINE program ID, guest JWT, and activation endpoint must all match. A devnet subscription transaction cannot be activated on the mainnet API host.
 
-| Network | Free service levels | Program ID | API host |
-|---------|---------------------|------------|----------|
-| Mainnet | `1` for 60-second delay, `12` for real-time | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `https://txline.txodds.com` |
-| Devnet | `1`; current row reports `samplingIntervalSec = 0` | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `https://txline-dev.txodds.com` |
+| Network | Free service levels                                | Program ID                                     | API host                        |
+| ------- | -------------------------------------------------- | ---------------------------------------------- | ------------------------------- |
+| Mainnet | `1` for 60-second delay, `12` for real-time        | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `https://txline.txodds.com`     |
+| Devnet  | `1`; current row reports `samplingIntervalSec = 0` | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `https://txline-dev.txodds.com` |
 
 Before you subscribe, confirm that you have:
 
@@ -56,7 +61,10 @@ npm install @coral-xyz/anchor @solana/web3.js @solana/spl-token axios tweetnacl
 ```
 
 <Info>
-The repository also includes runnable devnet free-tier scripts in [Runnable Devnet Examples](/documentation/examples/devnet-examples). Those examples use the current devnet IDL/types and require Node.js `20+` because of the SSE client dependency in the lockfile.
+  The repository also includes runnable devnet free-tier scripts in [Runnable
+  Devnet Examples](/documentation/examples/devnet-examples). Those examples use
+  the current devnet IDL/types and require Node.js `20+` because of the SSE
+  client dependency in the lockfile.
 </Info>
 
 ```typescript
@@ -98,10 +106,7 @@ const provider = new anchor.AnchorProvider(connection, wallet, {
 });
 anchor.setProvider(provider);
 
-const program = new anchor.Program<Txoracle>(
-  txoracleIdl as Txoracle,
-  provider
-);
+const program = new anchor.Program<Txoracle>(txoracleIdl as Txoracle, provider);
 
 if (!program.programId.equals(programId)) {
   throw new Error(
@@ -116,7 +121,7 @@ Choose between the free service levels that are enabled on your network. Mainnet
 
 ```typescript
 // Free tier configuration - choose one:
-const SERVICE_LEVEL_ID = 1;  // Devnet: samplingIntervalSec = 0; mainnet: 60 seconds
+const SERVICE_LEVEL_ID = 1; // Devnet: samplingIntervalSec = 0; mainnet: 60 seconds
 // const SERVICE_LEVEL_ID = 12; // Mainnet real-time World Cup & Int Friendlies
 const DURATION_WEEKS = 4; // Subscribe for 4 weeks at a time
 const SELECTED_LEAGUES: number[] = []; // Empty for standard bundle
@@ -167,7 +172,10 @@ console.log("Subscription transaction:", txSig);
 ```
 
 <Note>
-**No TxL Payment Required**: Free tiers require no TxL payment. The transaction still registers your wallet subscription on-chain, consumes SOL for normal Solana fees, and must be activated with the matching TxLINE API host.
+  **No TxL Payment Required**: Free tiers require no TxL payment. The
+  transaction still registers your wallet subscription on-chain, consumes SOL
+  for normal Solana fees, and must be activated with the matching TxLINE API
+  host.
 </Note>
 
 ### Step 3: Activate Your API Access
@@ -189,15 +197,19 @@ async function signActivationMessage(message: Uint8Array): Promise<Uint8Array> {
     return wallet.signMessage(message);
   }
 
-  const localPayer = (provider.wallet as anchor.Wallet & {
-    payer?: anchor.web3.Keypair;
-  }).payer;
+  const localPayer = (
+    provider.wallet as anchor.Wallet & {
+      payer?: anchor.web3.Keypair;
+    }
+  ).payer;
 
   if (localPayer) {
     return nacl.sign.detached(message, localPayer.secretKey);
   }
 
-  throw new Error("Wallet must support signMessage, or run with a local Anchor payer.");
+  throw new Error(
+    "Wallet must support signMessage, or run with a local Anchor payer."
+  );
 }
 
 const signatureBytes = await signActivationMessage(message);
@@ -212,7 +224,7 @@ const activationResponse = await axios.post(
     leagues: SELECTED_LEAGUES,
   },
   {
-    headers: { Authorization: `Bearer ${jwt}` }
+    headers: { Authorization: `Bearer ${jwt}` },
   }
 );
 
@@ -245,7 +257,10 @@ Use [Runnable Devnet Examples](/documentation/examples/devnet-examples) for comp
 Data API endpoints use `Authorization: Bearer ${jwt}` for the guest JWT and `X-Api-Token: ${apiToken}` for the activated API token.
 
 <Info>
-If activation or data access fails, use [Troubleshooting](/documentation/examples/troubleshooting) before opening a support ticket. Most activation failures come from a network mismatch, a different signing wallet, or signing the wrong message string.
+  If activation or data access fails, use
+  [Troubleshooting](/documentation/examples/troubleshooting) before opening a
+  support ticket. Most activation failures come from a network mismatch, a
+  different signing wallet, or signing the wrong message string.
 </Info>
 
 ## Ready for More?
@@ -273,21 +288,36 @@ View our [Subscription Tiers](/documentation/subscription-tiers) to see all avai
     All subscriptions can be purchased for any duration in multiples of 4 weeks (28 days), up to 12 months. Simply re-subscribe when your access expires. There's no cost to renew free tiers.
   </Accordion>
 
-  <Accordion title="Can I upgrade from free tier to paid?">
-    Absolutely! You can upgrade at any time by subscribing to a paid tier. Your new subscription will take effect immediately.
-  </Accordion>
+{" "}
 
-  <Accordion title="Is there a rate limit on free tier?">
-    No rate limits on API calls. Mainnet service level `1` has a 60-second delay, while mainnet service level `12` is real-time. Devnet sampling follows its on-chain pricing matrix; the current level `1` row reports `samplingIntervalSec = 0`.
-  </Accordion>
+<Accordion title="Can I upgrade from free tier to paid?">
+  Absolutely! You can upgrade at any time by subscribing to a paid tier. Your
+  new subscription will take effect immediately.
+</Accordion>
 
-  <Accordion title="Do I need SOL for the free tier?">
-    Yes. No TxL purchase is required for the free tier, but the Solana wallet still needs SOL on the selected network to submit the on-chain subscription transaction and cover any account rent.
-  </Accordion>
+{" "}
 
-  <Accordion title="What happens if I don't renew?">
-    Your API access will expire after the subscription period ends. You can re-subscribe at any time to regain access.
-  </Accordion>
+<Accordion title="Is there a rate limit on free tier?">
+  No rate limits on API calls. Mainnet service level `1` has a 60-second delay,
+  while mainnet service level `12` is real-time. Devnet sampling follows its
+  on-chain pricing matrix; the current level `1` row reports
+  `samplingIntervalSec = 0`.
+</Accordion>
+
+{" "}
+
+<Accordion title="Do I need SOL for the free tier?">
+  Yes. No TxL purchase is required for the free tier, but the Solana wallet
+  still needs SOL on the selected network to submit the on-chain subscription
+  transaction and cover any account rent.
+</Accordion>
+
+{" "}
+
+<Accordion title="What happens if I don't renew?">
+  Your API access will expire after the subscription period ends. You can
+  re-subscribe at any time to regain access.
+</Accordion>
 
   <Accordion title="Can I use this for commercial projects?">
     Yes! The free tier can be used for commercial projects. However, for production applications, we recommend upgrading to real-time data for the best user experience.
@@ -297,5 +327,7 @@ View our [Subscription Tiers](/documentation/subscription-tiers) to see all avai
 ---
 
 <Info>
-**Ready to start?** Follow the steps above to subscribe on-chain, activate your API access, and start calling the World Cup data endpoints. No credit card or TxL purchase is required for the free tier.
+  **Ready to start?** Follow the steps above to subscribe on-chain, activate
+  your API access, and start calling the World Cup data endpoints. No credit
+  card or TxL purchase is required for the free tier.
 </Info>

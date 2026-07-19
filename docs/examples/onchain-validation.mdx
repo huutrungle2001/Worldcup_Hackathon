@@ -4,15 +4,22 @@ description: "Validate scores data using cryptographic Merkle proofs"
 ---
 
 <Info>
-**Prerequisites**: Complete the [Quickstart](/documentation/quickstart) guide to set up authentication and subscriptions. The snippets assume `jwt` is the guest JWT from `/auth/guest/start` and `apiToken` is the value returned by `/api/token/activate`.
+  **Prerequisites**: Complete the [Quickstart](/documentation/quickstart) guide
+  to set up authentication and subscriptions. The snippets assume `jwt` is the
+  guest JWT from `/auth/guest/start` and `apiToken` is the value returned by
+  `/api/token/activate`.
 </Info>
 
 <Info>
-**API Endpoints**: Use `https://txline.txodds.com/api/` for mainnet or `https://txline-dev.txodds.com/api/` for devnet
+  **API Endpoints**: Use `https://txline.txodds.com/api/` for mainnet or
+  `https://txline-dev.txodds.com/api/` for devnet
 </Info>
 
 <Info>
-**Program setup**: Use generated types that match your selected network, and use [Program Addresses](/documentation/programs/addresses), [Program Reference (Mainnet)](/documentation/programs/mainnet), or [Program Reference (Devnet)](/documentation/programs/devnet) for program IDs and PDA derivation.
+  **Program setup**: Use generated types that match your selected network, and
+  use [Program Addresses](/documentation/programs/addresses), [Program Reference
+  (Mainnet)](/documentation/programs/mainnet), or [Program Reference
+  (Devnet)](/documentation/programs/devnet) for program IDs and PDA derivation.
 </Info>
 
 ## Overview
@@ -21,15 +28,18 @@ This guide demonstrates how to validate scores data against on-chain Merkle root
 
 The public `/api/scores/stat-validation` endpoint supports both validation shapes:
 
-| Query shape | On-chain method | Notes |
-|-------------|-----------------|-------|
-| `statKey=...` and optional `statKey2=...` | `validateStat` | Legacy single-stat and two-stat validation. |
-| `statKeys=1,2,...` | `validateStatV2` | Current multi-stat validation with indexed strategy predicates. |
+| Query shape                               | On-chain method  | Notes                                                           |
+| ----------------------------------------- | ---------------- | --------------------------------------------------------------- |
+| `statKey=...` and optional `statKey2=...` | `validateStat`   | Legacy single-stat and two-stat validation.                     |
+| `statKeys=1,2,...`                        | `validateStatV2` | Current multi-stat validation with indexed strategy predicates. |
 
 Use the same network for the API request, IDL/types, program ID, and on-chain root PDA.
 
 <Info>
-The repository now includes runnable devnet examples for both paths in [`examples/devnet/scripts`](https://github.com/txodds/tx-on-chain/tree/main/examples/devnet/scripts). See [Runnable Devnet Examples](/documentation/examples/devnet-examples) for setup and script mapping.
+  The repository now includes runnable devnet examples for both paths in
+  [`examples/devnet/scripts`](https://github.com/txodds/tx-on-chain/tree/main/examples/devnet/scripts).
+  See [Runnable Devnet Examples](/documentation/examples/devnet-examples) for
+  setup and script mapping.
 </Info>
 
 ## Validation Checklist
@@ -61,8 +71,8 @@ const httpClient = axios.create({
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${jwt}`,
-    "X-Api-Token": apiToken
+    Authorization: `Bearer ${jwt}`,
+    "X-Api-Token": apiToken,
   },
   baseURL: "https://txline.txodds.com",
 });
@@ -73,10 +83,10 @@ function toBytes32(value: string | number[] | Uint8Array): number[] {
   const bytes = Array.isArray(value)
     ? Uint8Array.from(value)
     : value instanceof Uint8Array
-      ? value
-      : value.startsWith("0x")
-        ? Buffer.from(value.slice(2), "hex")
-        : Buffer.from(value, "base64");
+    ? value
+    : value.startsWith("0x")
+    ? Buffer.from(value.slice(2), "hex")
+    : Buffer.from(value, "base64");
 
   if (bytes.length !== 32) {
     throw new Error(`Expected 32 bytes, received ${bytes.length}`);
@@ -85,7 +95,12 @@ function toBytes32(value: string | number[] | Uint8Array): number[] {
   return Array.from(bytes);
 }
 
-function toProofNodes(nodes: Array<{ hash: string | number[] | Uint8Array; isRightSibling: boolean }>) {
+function toProofNodes(
+  nodes: Array<{
+    hash: string | number[] | Uint8Array;
+    isRightSibling: boolean;
+  }>
+) {
   return nodes.map((node) => ({
     hash: toBytes32(node.hash),
     isRightSibling: node.isRightSibling,
@@ -99,7 +114,9 @@ Retrieve a snapshot of scores for a specific fixture:
 
 ```typescript
 const fixtureId = 17952170;
-const response = await httpClient.get(`/api/scores/snapshot/${fixtureId}?asOf=${Date.now()}`);
+const response = await httpClient.get(
+  `/api/scores/snapshot/${fixtureId}?asOf=${Date.now()}`
+);
 console.log(`Snapshot for fixture ${fixtureId}:`, response.data);
 ```
 
@@ -107,12 +124,14 @@ Search for recent score updates:
 
 ```typescript
 const now = new Date();
-const targetTime = new Date(now.getTime() - (5 * 300000)); // 25 minutes ago
+const targetTime = new Date(now.getTime() - 5 * 300000); // 25 minutes ago
 const epochDay = Math.floor(targetTime.getTime() / 86400000);
 const hourOfDay = targetTime.getUTCHours();
 const interval = Math.floor(targetTime.getUTCMinutes() / 5);
 
-const updates = await httpClient.get(`/api/scores/updates/${epochDay}/${hourOfDay}/${interval}`);
+const updates = await httpClient.get(
+  `/api/scores/updates/${epochDay}/${hourOfDay}/${interval}`
+);
 console.log(`Updates found:`, updates.data);
 ```
 
@@ -139,8 +158,8 @@ const validation = await httpClient.get("/api/scores/stat-validation", {
   params: {
     fixtureId: scoreRecord.FixtureId ?? scoreRecord.fixtureId,
     seq,
-    statKey: 1002
-  }
+    statKey: 1002,
+  },
 });
 ```
 
@@ -162,8 +181,8 @@ const response = await httpClient.get("/api/scores/stat-validation", {
   params: {
     fixtureId: 17952170,
     seq: 941,
-    statKey: 1002
-  }
+    statKey: 1002,
+  },
 });
 const validation = response.data;
 
@@ -216,7 +235,7 @@ const [dailyScoresPda] = PublicKey.findProgramAddressSync(
 
 // Execute validation using view (read-only simulation)
 const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-  units: 1_400_000
+  units: 1_400_000,
 });
 
 try {
@@ -228,11 +247,11 @@ try {
       mainTreeProof,
       predicate,
       stat1,
-      null,  // No second stat
-      null   // No operator
+      null, // No second stat
+      null // No operator
     )
     .accounts({
-      dailyScoresMerkleRoots: dailyScoresPda
+      dailyScoresMerkleRoots: dailyScoresPda,
     })
     .preInstructions([computeBudgetIx])
     .view();
@@ -258,8 +277,8 @@ const response2 = await httpClient.get("/api/scores/stat-validation", {
     fixtureId: 17952170,
     seq: 941,
     statKey: 1002,
-    statKey2: 1003
-  }
+    statKey2: 1003,
+  },
 });
 const validation2 = response2.data;
 
@@ -383,22 +402,22 @@ console.log("V2 validation result:", isValidV2);
 
 For complete runnable versions, use:
 
-| Script | V2 coverage |
-|--------|-------------|
-| [`subscription_scores_1stat.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_1stat.ts) | One requested stat with `validateStatV2`. |
-| [`subscription_scores_v2.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_v2.ts) | Two-stat strategies and geometric validation. |
-| [`subscription_scores_v2a.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_v2a.ts) | Multi-leg strategies using four requested stat keys. |
+| Script                                                                                                                                 | V2 coverage                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [`subscription_scores_1stat.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_1stat.ts) | One requested stat with `validateStatV2`.            |
+| [`subscription_scores_v2.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_v2.ts)       | Two-stat strategies and geometric validation.        |
+| [`subscription_scores_v2a.ts`](https://github.com/txodds/tx-on-chain/blob/main/examples/devnet/scripts/subscription_scores_v2a.ts)     | Multi-leg strategies using four requested stat keys. |
 
 ## Common Validation Errors
 
-| Symptom | What to check |
-|---------|---------------|
-| `InvalidMainTreeProof` | Use the same `targetTs` for `validateStat` and `daily_scores_roots` PDA derivation. Confirm the proof hashes are exactly 32 bytes and not reversed. Confirm fixture ID and `seq` match the returned proof payload. |
-| Account integrity passes but proof fails | The PDA is probably on the right network, but the timestamp, interval, or proof payload may not match the on-chain root. Recompute `epochDay = Math.floor(targetTs / 86400000)`. |
-| Predicate returns false | First test with an exact predicate against the returned stat value, then replace it with your application predicate. |
-| `IncompleteStatCoverage` | Ensure every entry in `payload.stats` is referenced exactly once by a discrete predicate or geometric target. Remove unused requested stats or add the missing strategy coverage. |
-| V2 strategy validates the wrong stat | Confirm the requested `statKeys` order and the positional strategy indexes match. `index: 0` means the first requested key, not the smallest stat key. |
-| `401` or `403` from the proof endpoint | Renew the guest JWT, keep the `X-Api-Token`, and confirm both credentials came from the same network host. |
+| Symptom                                  | What to check                                                                                                                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `InvalidMainTreeProof`                   | Use the same `targetTs` for `validateStat` and `daily_scores_roots` PDA derivation. Confirm the proof hashes are exactly 32 bytes and not reversed. Confirm fixture ID and `seq` match the returned proof payload. |
+| Account integrity passes but proof fails | The PDA is probably on the right network, but the timestamp, interval, or proof payload may not match the on-chain root. Recompute `epochDay = Math.floor(targetTs / 86400000)`.                                   |
+| Predicate returns false                  | First test with an exact predicate against the returned stat value, then replace it with your application predicate.                                                                                               |
+| `IncompleteStatCoverage`                 | Ensure every entry in `payload.stats` is referenced exactly once by a discrete predicate or geometric target. Remove unused requested stats or add the missing strategy coverage.                                  |
+| V2 strategy validates the wrong stat     | Confirm the requested `statKeys` order and the positional strategy indexes match. `index: 0` means the first requested key, not the smallest stat key.                                                             |
+| `401` or `403` from the proof endpoint   | Renew the guest JWT, keep the `X-Api-Token`, and confirm both credentials came from the same network host.                                                                                                         |
 
 See [Troubleshooting](/documentation/examples/troubleshooting) for the full activation, streaming, and validation checklist.
 

@@ -5,48 +5,52 @@ description: "TxLINE Solana program addresses and public validation accounts"
 
 ## Mainnet Addresses
 
-| Type | Address |
-|------|---------|
-| Program ID | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` |
-| TxL Token Mint | `Zhw9TVKp68a1QrftncMSd6ELXKDtpVMNuMGr1jNwdeL` |
-| API Endpoint | `https://txline.txodds.com/api/` |
+| Type           | Address                                        |
+| -------------- | ---------------------------------------------- |
+| Program ID     | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` |
+| TxL Token Mint | `Zhw9TVKp68a1QrftncMSd6ELXKDtpVMNuMGr1jNwdeL`  |
+| API Endpoint   | `https://txline.txodds.com/api/`               |
 
 ## Devnet Addresses
 
-| Type | Address |
-|------|---------|
-| Program ID | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` |
+| Type           | Address                                        |
+| -------------- | ---------------------------------------------- |
+| Program ID     | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` |
 | TxL Token Mint | `4Zao8ocPhmMgq7PdsYWyxvqySMGx7xb9cMftPMkEokRG` |
-| API Endpoint | `https://txline-dev.txodds.com/api/` |
+| API Endpoint   | `https://txline-dev.txodds.com/api/`           |
 
 <Warning>
-Use all values from one network only. A devnet subscribe transaction from `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` must be activated with `https://txline-dev.txodds.com`, and a mainnet subscribe transaction from `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` must be activated with `https://txline.txodds.com`.
+  Use all values from one network only. A devnet subscribe transaction from
+  `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` must be activated with
+  `https://txline-dev.txodds.com`, and a mainnet subscribe transaction from
+  `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` must be activated with
+  `https://txline.txodds.com`.
 </Warning>
 
 ## Network Consistency Checklist
 
-| Network | Solana RPC | Program ID | TxL Mint | Guest JWT URL | Activation URL |
-|---------|------------|------------|----------|---------------|----------------|
-| Mainnet | `https://api.mainnet-beta.solana.com` | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `Zhw9TVKp68a1QrftncMSd6ELXKDtpVMNuMGr1jNwdeL` | `https://txline.txodds.com/auth/guest/start` | `https://txline.txodds.com/api/token/activate` |
-| Devnet | `https://api.devnet.solana.com` | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `4Zao8ocPhmMgq7PdsYWyxvqySMGx7xb9cMftPMkEokRG` | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/token/activate` |
+| Network | Solana RPC                            | Program ID                                     | TxL Mint                                       | Guest JWT URL                                    | Activation URL                                     |
+| ------- | ------------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| Mainnet | `https://api.mainnet-beta.solana.com` | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `Zhw9TVKp68a1QrftncMSd6ELXKDtpVMNuMGr1jNwdeL`  | `https://txline.txodds.com/auth/guest/start`     | `https://txline.txodds.com/api/token/activate`     |
+| Devnet  | `https://api.devnet.solana.com`       | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `4Zao8ocPhmMgq7PdsYWyxvqySMGx7xb9cMftPMkEokRG` | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/token/activate` |
 
 The transaction signature, guest JWT, activation endpoint, and program ID must all come from the same row. If any one value comes from a different row, activation can fail even when the on-chain transaction itself confirmed.
 
 ## API Hosts
 
-| Network | Guest Auth | API Base |
-|---------|------------|----------|
-| Mainnet | `https://txline.txodds.com/auth/guest/start` | `https://txline.txodds.com/api/` |
-| Devnet | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/` |
+| Network | Guest Auth                                       | API Base                             |
+| ------- | ------------------------------------------------ | ------------------------------------ |
+| Mainnet | `https://txline.txodds.com/auth/guest/start`     | `https://txline.txodds.com/api/`     |
+| Devnet  | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/` |
 
 Use the host root for `/auth/guest/start`, then use the matching `/api/token/activate` endpoint after the on-chain `subscribe` transaction confirms.
 
 ## Program References
 
-| Network | Reference |
-|---------|-----------|
+| Network | Reference                                                      |
+| ------- | -------------------------------------------------------------- |
 | Mainnet | [Program Reference (Mainnet)](/documentation/programs/mainnet) |
-| Devnet | [Program Reference (Devnet)](/documentation/programs/devnet) |
+| Devnet  | [Program Reference (Devnet)](/documentation/programs/devnet)   |
 
 For runnable code, use the examples that match your network and keep the program ID, generated types, API host, and proof data aligned.
 
@@ -68,14 +72,18 @@ Send the detached wallet signature as base64 in `walletSignature`, and send the 
 
 ## Public Validation Accounts
 
-| Account | Seed(s) | Purpose |
-|---------|---------|---------|
-| Daily scores roots | `daily_scores_roots`, `epochDay` as u16 little-endian | On-chain root account used for score proof validation |
-| Daily batch roots | `daily_batch_roots`, `epochDay` as u16 little-endian | On-chain root account used for odds proof validation |
+| Account                  | Seed(s)                                                            | Purpose                                                 |
+| ------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------- |
+| Daily scores roots       | `daily_scores_roots`, `epochDay` as u16 little-endian              | On-chain root account used for score proof validation   |
+| Daily batch roots        | `daily_batch_roots`, `epochDay` as u16 little-endian               | On-chain root account used for odds proof validation    |
 | Ten daily fixtures roots | `ten_daily_fixtures_roots`, aligned epoch day as u16 little-endian | On-chain root account used for fixture proof validation |
 
 <Warning>
-Derive the epoch day from the exact timestamp in the proof response, never from `Date.now()`. For scores, use `validation.summary.updateStats.minTimestamp`; for fixtures, use `validation.snapshot.Ts`; for odds, use `validation.odds.Ts`. Recompute it for every proof.
+  Derive the epoch day from the exact timestamp in the proof response, never
+  from `Date.now()`. For scores, use
+  `validation.summary.updateStats.minTimestamp`; for fixtures, use
+  `validation.snapshot.Ts`; for odds, use `validation.odds.Ts`. Recompute it for
+  every proof.
 </Warning>
 
 ```typescript

@@ -14,13 +14,14 @@ Most integration issues come from one of four causes:
 
 Use one network consistently for every value:
 
-| Network | Program ID | Guest JWT URL | Activation URL | API Base |
-|---------|------------|---------------|----------------|----------|
-| Mainnet | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `https://txline.txodds.com/auth/guest/start` | `https://txline.txodds.com/api/token/activate` | `https://txline.txodds.com/api/` |
-| Devnet | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/token/activate` | `https://txline-dev.txodds.com/api/` |
+| Network | Program ID                                     | Guest JWT URL                                    | Activation URL                                     | API Base                             |
+| ------- | ---------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- | ------------------------------------ |
+| Mainnet | `9ExbZjAapQww1vfcisDmrngPinHTEfpjYRWMunJgcKaA` | `https://txline.txodds.com/auth/guest/start`     | `https://txline.txodds.com/api/token/activate`     | `https://txline.txodds.com/api/`     |
+| Devnet  | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` | `https://txline-dev.txodds.com/auth/guest/start` | `https://txline-dev.txodds.com/api/token/activate` | `https://txline-dev.txodds.com/api/` |
 
 <Warning>
-Never share your guest JWT, activated API token, wallet secret key, or unredacted request headers in public support channels.
+  Never share your guest JWT, activated API token, wallet secret key, or
+  unredacted request headers in public support channels.
 </Warning>
 
 ## Activation Checklist
@@ -61,28 +62,28 @@ When running the repository examples in `examples/devnet`, confirm:
 
 ## Common Errors
 
-| Symptom | Likely cause | What to check |
-|---------|--------------|---------------|
-| Example script fails before connecting to TxLINE | Node runtime or environment variables do not match the current examples | Use Node.js `20+`, set `ANCHOR_PROVIDER_URL`, `ANCHOR_WALLET`, and `TOKEN_MINT_ADDRESS`, then run from the repository root |
-| `504 Gateway Timeout` from `/api/token/activate` | Often a network mismatch, such as a devnet transaction sent to the mainnet activation host, or a backend timeout | Confirm `txSig`, guest JWT, program ID, and activation URL are all mainnet or all devnet |
-| `403 signature verification failed` | Wrong signing preimage, wrong wallet, wrong signature encoding, or wrong JWT host | Sign the exact message string, use the subscribe wallet, send base64 detached signature, and use the matching network JWT |
-| `401 Unauthorized` on data endpoints | Missing or expired guest JWT | Request a fresh guest JWT from the same host and retry with the same `X-Api-Token` |
-| `403 Access denied` on data endpoints | Invalid API token, expired subscription, wrong network token, or insufficient subscription permissions | Confirm the `X-Api-Token` came from the same network and subscription bundle |
-| `Invalid public key input` | Placeholder value was not replaced with a real Solana public key | Replace all placeholders with the program ID, TxL mint, and wallet public key for the selected network |
-| SSE connection opens but no data messages arrive | The stream can be healthy even when no covered fixture is actively producing updates | Check the [Schedule](/documentation/scores/schedule), keep the stream open, or use historical endpoints for completed fixtures |
-| `/api/scores/stat-validation` called with `seq=0` or a random `seq` | The sequence was treated as a placeholder instead of coming from a real score record | Get a score record from snapshot, updates, historical data, or the scores stream, then pass that record's observed `Seq` or `seq` value |
-| `InvalidMainTreeProof` during validation | Timestamp, epoch day PDA, proof decoding, or fixture/update selection mismatch | Derive `daily_scores_roots` from the same timestamp passed to `validateStat`, decode hashes to exactly 32 bytes, and verify you are using the intended fixture and sequence |
-| `validateStatV2` strategy checks the wrong value | `statKeys` order and positional strategy indexes were mixed up | Keep the requested `statKeys` order next to the strategy. `index`, `indexA`, `indexB`, and `statIndex` refer to `statsToProve[0..N]`, not to the numeric stat key itself |
-| Final outcome settlement uses the wrong phase | The client selected an in-running or period-specific record instead of the match finalisation record | Use a scores record with `action=game_finalised`, `statusId=100`, and `period=100` |
+| Symptom                                                             | Likely cause                                                                                                     | What to check                                                                                                                                                               |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Example script fails before connecting to TxLINE                    | Node runtime or environment variables do not match the current examples                                          | Use Node.js `20+`, set `ANCHOR_PROVIDER_URL`, `ANCHOR_WALLET`, and `TOKEN_MINT_ADDRESS`, then run from the repository root                                                  |
+| `504 Gateway Timeout` from `/api/token/activate`                    | Often a network mismatch, such as a devnet transaction sent to the mainnet activation host, or a backend timeout | Confirm `txSig`, guest JWT, program ID, and activation URL are all mainnet or all devnet                                                                                    |
+| `403 signature verification failed`                                 | Wrong signing preimage, wrong wallet, wrong signature encoding, or wrong JWT host                                | Sign the exact message string, use the subscribe wallet, send base64 detached signature, and use the matching network JWT                                                   |
+| `401 Unauthorized` on data endpoints                                | Missing or expired guest JWT                                                                                     | Request a fresh guest JWT from the same host and retry with the same `X-Api-Token`                                                                                          |
+| `403 Access denied` on data endpoints                               | Invalid API token, expired subscription, wrong network token, or insufficient subscription permissions           | Confirm the `X-Api-Token` came from the same network and subscription bundle                                                                                                |
+| `Invalid public key input`                                          | Placeholder value was not replaced with a real Solana public key                                                 | Replace all placeholders with the program ID, TxL mint, and wallet public key for the selected network                                                                      |
+| SSE connection opens but no data messages arrive                    | The stream can be healthy even when no covered fixture is actively producing updates                             | Check the [Schedule](/documentation/scores/schedule), keep the stream open, or use historical endpoints for completed fixtures                                              |
+| `/api/scores/stat-validation` called with `seq=0` or a random `seq` | The sequence was treated as a placeholder instead of coming from a real score record                             | Get a score record from snapshot, updates, historical data, or the scores stream, then pass that record's observed `Seq` or `seq` value                                     |
+| `InvalidMainTreeProof` during validation                            | Timestamp, epoch day PDA, proof decoding, or fixture/update selection mismatch                                   | Derive `daily_scores_roots` from the same timestamp passed to `validateStat`, decode hashes to exactly 32 bytes, and verify you are using the intended fixture and sequence |
+| `validateStatV2` strategy checks the wrong value                    | `statKeys` order and positional strategy indexes were mixed up                                                   | Keep the requested `statKeys` order next to the strategy. `index`, `indexA`, `indexB`, and `statIndex` refer to `statsToProve[0..N]`, not to the numeric stat key itself    |
+| Final outcome settlement uses the wrong phase                       | The client selected an in-running or period-specific record instead of the match finalisation record             | Use a scores record with `action=game_finalised`, `statusId=100`, and `period=100`                                                                                          |
 
 ## Auth Headers
 
 Most data endpoints require both credentials:
 
-| Header | Value |
-|--------|-------|
-| `Authorization` | `Bearer <guest-jwt>` from `/auth/guest/start` |
-| `X-Api-Token` | Activated API token from `/api/token/activate` |
+| Header          | Value                                          |
+| --------------- | ---------------------------------------------- |
+| `Authorization` | `Bearer <guest-jwt>` from `/auth/guest/start`  |
+| `X-Api-Token`   | Activated API token from `/api/token/activate` |
 
 If the guest JWT expires, request a new JWT from the same network host. You do not need to reactivate the API token unless the subscription or token itself is invalid.
 

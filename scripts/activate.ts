@@ -10,7 +10,9 @@ async function activate() {
   const txSig = process.argv[2] || process.env.TXLINE_TXSIG;
 
   if (!txSig) {
-    logger.error("No subscription signature provided! Please pass the transaction signature as an argument:");
+    logger.error(
+      "No subscription signature provided! Please pass the transaction signature as an argument:"
+    );
     console.log("Example: yarn ts-node scripts/activate.ts <TX_SIGNATURE>");
     process.exit(1);
   }
@@ -23,7 +25,9 @@ async function activate() {
   const apiBaseUrl = `${apiOrigin}/api`;
   const SELECTED_LEAGUES: number[] = [];
 
-  logger.info(`Requesting guest authentication token from: ${apiOrigin}/auth/guest/start`);
+  logger.info(
+    `Requesting guest authentication token from: ${apiOrigin}/auth/guest/start`
+  );
   let jwt: string;
   try {
     const authResponse = await axios.post(`${apiOrigin}/auth/guest/start`);
@@ -59,7 +63,7 @@ async function activate() {
 
     const apiToken = activationResponse.data.token || activationResponse.data;
     logger.info("✓ API Token activated successfully!");
-    
+
     const envPath = path.join(__dirname, "../.env");
     let envContent = "";
     if (fs.existsSync(envPath)) {
@@ -67,16 +71,24 @@ async function activate() {
     }
 
     if (envContent.includes("X_API_TOKEN=")) {
-      envContent = envContent.replace(/X_API_TOKEN=.*/, `X_API_TOKEN=${apiToken}`);
+      envContent = envContent.replace(
+        /X_API_TOKEN=.*/,
+        `X_API_TOKEN=${apiToken}`
+      );
     } else {
       envContent += `\nX_API_TOKEN=${apiToken}`;
     }
 
-    fs.writeFileSync(envPath, envContent);
+    fs.writeFileSync(envPath, envContent, { mode: 0o600 });
+    fs.chmodSync(envPath, 0o600);
     logger.info("✓ Saved X_API_TOKEN to .env file!");
 
     console.log(`\n======================================================`);
-    console.log(`API Token: ${apiToken}`);
+    console.log(
+      `API Token: ${apiToken.slice(0, 6)}...${apiToken.slice(
+        -6
+      )} (Redacted for security, saved to .env with 0600 permissions)`
+    );
     console.log(`======================================================\n`);
   } catch (err: any) {
     logger.error("Activation failed!", err.response?.data || err.message);

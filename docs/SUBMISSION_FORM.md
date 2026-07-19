@@ -11,42 +11,32 @@ Note:
 Link to Your Submission
 Make sure this link is accessible by everyone!
 
-https://
+https://github.com/huutrungle2001/Worldcup_Hackathon
 
-Add a link
-Tweet Link
-This helps sponsors discover (and maybe repost) your work on X! If this submission is for a X thread bounty, you can ignore this field.
-
-https://
-
-Add a tweet's link
 Project Title
-
+ProofGuard: Solana Risk Circuit Breaker Agent for World Cup Soccer Markets
 
 Briefly explain your Project
-
+ProofGuard is an autonomous sports risk circuit breaker on Solana powered by TxLINE streaming data. It monitors soccer matches in real time, automatically halts virtual betting markets on goal events, verifies daily Merkle proof roots on-chain via Anchor, and reopens markets once fresh repriced odds arrive.
 
 Link to your live & working MVP. Make sure it's publicly accessible.
-https://
+https://github.com/huutrungle2001/Worldcup_Hackathon (Self-hosted dashboard via `cd dashboard && yarn dev`)
 
-Add a link...
 Link to Your Live Demo Video (YouTube, Loom, etc). Should be viewable by anyone with the link.
-https://
+[Pending recording by submitter]
 
-Add a link...
 Project's Public Repository Link (Github, Gitlab, etc.)
-https://
+https://github.com/huutrungle2001/Worldcup_Hackathon
 
-Add a link...
 Link to your Project's Technical Documentation
-https://
+https://github.com/huutrungle2001/Worldcup_Hackathon/blob/master/README.md
 
-Add a link...
 Link to your Project's X Profile or a tweet about it.
-https://
+[Optional]
 
-Add a link...
 Share your team's experience using the TxLINE API. What did you like the most, and where did you hit friction?
+- Likes: The SSE real-time stream endpoints and on-chain Merkle proof tree design (`validateStatV2`) on Devnet allow seamless autonomous risk circuit breaking and cryptographic verification.
+- Friction: Field casing differences across SSE vs HTTP endpoints (`Participant1` vs `participantOneName`, `Stats["1"]` vs `scoreOne`) require strict client-side normalization adapter layers.
 
 
 Anything Else?

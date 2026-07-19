@@ -9,7 +9,9 @@ async function run() {
     const fixtures = await txLineClient.getFixtures();
     console.log(`\nActive Fixtures (Total: ${fixtures.length}):`);
     fixtures.slice(0, 5).forEach((f: any) => {
-      console.log(`- ID: ${f.fixtureId} | Match: ${f.participantOneName} vs ${f.participantTwoName} | Phase: ${f.gameStateName}`);
+      console.log(
+        `- ID: ${f.fixtureId} | Match: ${f.participantOneName} vs ${f.participantTwoName} | Phase: ${f.gameStateName}`
+      );
     });
     console.log();
   } catch (err: any) {

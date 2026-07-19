@@ -36,7 +36,9 @@ async function verify() {
   const idlAddress = idl.address;
   const configProgramId = CONFIG.devnet.programId.toBase58();
   if (idlAddress !== configProgramId) {
-    console.error(`❌ IDL address mismatch! Found ${idlAddress}, expected ${configProgramId}`);
+    console.error(
+      `❌ IDL address mismatch! Found ${idlAddress}, expected ${configProgramId}`
+    );
     process.exit(1);
   }
   console.log(`✓ IDL program ID verified: ${idlAddress}`);
@@ -77,7 +79,9 @@ async function verify() {
   try {
     const secretKeyArray = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
     walletKeypair = Keypair.fromSecretKey(Uint8Array.from(secretKeyArray));
-    console.log(`✓ Loaded wallet successfully. Public Key: ${walletKeypair.publicKey.toBase58()}`);
+    console.log(
+      `✓ Loaded wallet successfully. Public Key: ${walletKeypair.publicKey.toBase58()}`
+    );
   } catch (err: any) {
     console.error("❌ Failed to load wallet keypair from file:", err.message);
     process.exit(1);
@@ -100,8 +104,12 @@ async function verify() {
     const balanceSol = balance / 1e9;
     console.log(`✓ Wallet Balance: ${balanceSol} SOL`);
     if (balanceSol === 0) {
-      console.warn("\n⚠️ WARNING: Wallet has 0 SOL! You must fund this wallet on Solana Devnet to run transaction tests.");
-      console.warn("  Please visit: https://faucet.solana.com/ and request devnet SOL.");
+      console.warn(
+        "\n⚠️ WARNING: Wallet has 0 SOL! You must fund this wallet on Solana Devnet to run transaction tests."
+      );
+      console.warn(
+        "  Please visit: https://faucet.solana.com/ and request devnet SOL."
+      );
     } else {
       console.log("✓ Wallet is funded! Ready to execute transactions.");
     }
@@ -110,7 +118,9 @@ async function verify() {
   }
 
   console.log("\n======================================");
-  console.log("🎉 Verification complete. Your scaffolding and network setup is fully valid!");
+  console.log(
+    "🎉 Verification complete. Your scaffolding and network setup is fully valid!"
+  );
 }
 
 verify();

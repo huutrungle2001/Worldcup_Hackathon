@@ -14,7 +14,9 @@ async function run() {
     console.log(`Success! New balance: ${balance / 1e9} SOL`);
   } catch (error: any) {
     console.error(`Failed to request airdrop via RPC:`, error.message);
-    console.log(`Please visit https://faucet.solana.com/ to request devnet SOL manually.`);
+    console.log(
+      `Please visit https://faucet.solana.com/ to request devnet SOL manually.`
+    );
   }
 }
 

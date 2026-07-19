@@ -1,6 +1,11 @@
 import { logger } from "../utils/logger";
 
-export type MarketState = "OPEN" | "HALTED" | "PROOF_PENDING" | "FINAL_PROOF_PENDING" | "SETTLED";
+export type MarketState =
+  | "OPEN"
+  | "HALTED"
+  | "PROOF_PENDING"
+  | "FINAL_PROOF_PENDING"
+  | "SETTLED";
 
 export interface AuditEvent {
   timestamp: string;
@@ -26,7 +31,13 @@ export interface VirtualMarket {
   haltedAt?: string;
   reopenedAt?: string;
   settledAt?: string;
-  settlementOutcome?: "PARTICIPANT_ONE_WIN" | "PARTICIPANT_TWO_WIN" | "DRAW" | "UNKNOWN";
+  settlementOutcome?:
+    | "PARTICIPANT_ONE_WIN"
+    | "PARTICIPANT_TWO_WIN"
+    | "DRAW"
+    | "UNKNOWN";
+  pendingVerificationSeq?: number;
+  pendingVerificationType?: "GOAL" | "FINAL";
   auditTrail: AuditEvent[];
 }
 
@@ -49,7 +60,14 @@ export class MarketManager {
         oddsTwo: 0,
         auditTrail: [],
       };
-      this.addAuditEntry(market, "OPEN", "OPEN", "INIT", undefined, "Virtual market initialized in OPEN state.");
+      this.addAuditEntry(
+        market,
+        "OPEN",
+        "OPEN",
+        "INIT",
+        undefined,
+        "Virtual market initialized in OPEN state."
+      );
       this.markets.set(fixtureId, market);
     }
     return this.markets.get(fixtureId)!;
@@ -83,30 +101,50 @@ export class MarketManager {
     if (market.auditTrail.length > 100) {
       market.auditTrail.shift();
     }
-    logger.info(`[MARKET STATE CHANGE] Fixture ${market.fixtureId}: ${fromState} -> ${toState} | Reason: ${reasonCode} | ${message}`);
+    logger.info(
+      `[MARKET STATE CHANGE] Fixture ${market.fixtureId}: ${fromState} -> ${toState} | Reason: ${reasonCode} | ${message}`
+    );
   }
 
-  public transitionTo(market: VirtualMarket, newState: MarketState, reasonCode: string, triggerEventKey?: string, message = ""): boolean {
+  public transitionTo(
+    market: VirtualMarket,
+    newState: MarketState,
+    reasonCode: string,
+    triggerEventKey?: string,
+    message = ""
+  ): boolean {
     const oldState = market.state;
     if (oldState === newState) {
       return false;
     }
 
     if (oldState === "SETTLED") {
-      logger.warn(`Rejected state transition from SETTLED to ${newState} for fixture ${market.fixtureId}. Settled markets are immutable.`);
+      logger.warn(
+        `Rejected state transition from SETTLED to ${newState} for fixture ${market.fixtureId}. Settled markets are immutable.`
+      );
       return false;
     }
 
     market.state = newState;
     if (newState === "HALTED") {
       market.haltedAt = new Date().toISOString();
-    } else if (newState === "OPEN" && (oldState === "PROOF_PENDING" || oldState === "HALTED")) {
+    } else if (
+      newState === "OPEN" &&
+      (oldState === "PROOF_PENDING" || oldState === "HALTED")
+    ) {
       market.reopenedAt = new Date().toISOString();
     } else if (newState === "SETTLED") {
       market.settledAt = new Date().toISOString();
     }
 
-    this.addAuditEntry(market, oldState, newState, reasonCode, triggerEventKey, message);
+    this.addAuditEntry(
+      market,
+      oldState,
+      newState,
+      reasonCode,
+      triggerEventKey,
+      message
+    );
     return true;
   }
 }

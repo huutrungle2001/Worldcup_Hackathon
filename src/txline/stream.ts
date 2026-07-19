@@ -17,7 +17,8 @@ export function parseSseBlock(block: string): SseMessage | null {
     if (!rawLine || rawLine.startsWith(":")) continue;
 
     const separatorIndex = rawLine.indexOf(":");
-    const field = separatorIndex === -1 ? rawLine : rawLine.slice(0, separatorIndex);
+    const field =
+      separatorIndex === -1 ? rawLine : rawLine.slice(0, separatorIndex);
     const value =
       separatorIndex === -1
         ? ""
@@ -36,6 +37,8 @@ export function parseSseBlock(block: string): SseMessage | null {
 export class TxLineStream {
   private activeControllers: Map<string, AbortController> = new Map();
   private reconnectIntervals: Map<string, number> = new Map();
+  private lastEventIds: Map<string, string> = new Map();
+  private stableTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   public async connectStream(
     streamType: "odds" | "scores",
@@ -45,7 +48,9 @@ export class TxLineStream {
     const url = `${appConfig.apiOrigin}/api/${streamType}/stream`;
 
     if (this.activeControllers.has(streamType)) {
-      logger.warn(`Stream ${streamType} is already active. Disconnecting old connection...`);
+      logger.warn(
+        `Stream ${streamType} is already active. Disconnecting old connection...`
+      );
       this.disconnectStream(streamType);
     }
 
@@ -59,19 +64,31 @@ export class TxLineStream {
       const jwt = await txLineClient.getJwt();
       const apiToken = appConfig.apiToken;
 
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${jwt}`,
+        "X-Api-Token": apiToken!,
+        Accept: "text/event-stream",
+        "Cache-Control": "no-cache",
+      };
+
+      const lastId = this.lastEventIds.get(streamType);
+      if (lastId) {
+        logger.info(
+          `Preserving stream state. Attaching Last-Event-ID: ${lastId} to connection...`
+        );
+        headers["Last-Event-ID"] = lastId;
+      }
+
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-Api-Token": apiToken!,
-          Accept: "text/event-stream",
-          "Cache-Control": "no-cache",
-        },
+        headers,
         signal: controller.signal,
       });
 
       if (!response.ok) {
         if (response.status === 401) {
-          logger.warn(`Stream ${streamType} returned 401. Refreshing JWT and retrying...`);
+          logger.warn(
+            `Stream ${streamType} returned 401. Refreshing JWT and retrying...`
+          );
           await txLineClient.refreshJwt();
           this.connectStream(streamType, onMessage);
           return;
@@ -81,7 +98,18 @@ export class TxLineStream {
 
       logger.info(`✓ Connected successfully to ${streamType} stream!`);
       healthMonitor.updateService(streamName, "HEALTHY");
-      this.reconnectIntervals.set(streamType, 1000);
+
+      // Delay resetting backoff until connection has been stable for 5s (Finding 12)
+      if (this.stableTimeouts.has(streamType)) {
+        clearTimeout(this.stableTimeouts.get(streamType)!);
+      }
+      const stableTimeout = setTimeout(() => {
+        logger.info(
+          `Connection for ${streamType} stream stable. Resetting reconnect backoff.`
+        );
+        this.reconnectIntervals.set(streamType, 1000);
+      }, 5000);
+      this.stableTimeouts.set(streamType, stableTimeout);
 
       const reader = response.body?.getReader();
       if (!reader) {
@@ -104,6 +132,9 @@ export class TxLineStream {
 
           const sseMsg = parseSseBlock(block);
           if (sseMsg) {
+            if (sseMsg.id) {
+              this.lastEventIds.set(streamType, sseMsg.id);
+            }
             let parsedData: any;
             try {
               parsedData = JSON.parse(sseMsg.data);
@@ -116,7 +147,7 @@ export class TxLineStream {
           separator = buffer.match(/\r?\n\r?\n/);
         }
       }
-      
+
       logger.info(`Stream ${streamType} closed by server.`);
       this.handleReconnect(streamType, onMessage);
     } catch (err: any) {
@@ -132,14 +163,19 @@ export class TxLineStream {
     }
   }
 
-  private handleReconnect(streamType: "odds" | "scores", onMessage: (event: string, data: any) => void) {
+  private handleReconnect(
+    streamType: "odds" | "scores",
+    onMessage: (event: string, data: any) => void
+  ) {
     const currentDelay = this.reconnectIntervals.get(streamType) || 1000;
     const nextDelay = Math.min(currentDelay * 2, 30000);
     const jitter = Math.random() * 1000;
     const finalDelay = nextDelay + jitter;
     this.reconnectIntervals.set(streamType, nextDelay);
 
-    logger.info(`Reconnecting ${streamType} stream in ${Math.round(finalDelay)}ms...`);
+    logger.info(
+      `Reconnecting ${streamType} stream in ${Math.round(finalDelay)}ms...`
+    );
     setTimeout(() => {
       if (this.activeControllers.has(streamType)) {
         this.connectStream(streamType, onMessage);
@@ -148,6 +184,12 @@ export class TxLineStream {
   }
 
   public disconnectStream(streamType: "odds" | "scores") {
+    // Clear stable timeouts (Finding 12)
+    if (this.stableTimeouts.has(streamType)) {
+      clearTimeout(this.stableTimeouts.get(streamType)!);
+      this.stableTimeouts.delete(streamType);
+    }
+
     const controller = this.activeControllers.get(streamType);
     if (controller) {
       controller.abort();

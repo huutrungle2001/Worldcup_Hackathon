@@ -1,6 +1,6 @@
 import { txLineClient } from "../txline/api";
 import { riskAgent } from "../agent/risk";
-import { normalizeScoreEvent } from "../domain/types";
+import { normalizeScoreEvent, normalizeOddsUpdate } from "../domain/types";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
 
@@ -11,6 +11,8 @@ export class ReplayEngine {
   private timeoutId: NodeJS.Timeout | null = null;
   private currentStep = 0;
   private historicalRecords: any[] = [];
+  private lastScoreOne = 0;
+  private lastScoreTwo = 0;
 
   public async startReplay(fixtureId: number, speed = 1) {
     this.stopReplay();
@@ -19,18 +21,26 @@ export class ReplayEngine {
     this.speedMultiplier = speed;
     this.isPaused = false;
     this.currentStep = 0;
+    this.lastScoreOne = 0;
+    this.lastScoreTwo = 0;
     healthMonitor.setReplayMode(true);
 
-    logger.info(`Starting historical replay for fixture ${fixtureId} with speed ${speed}x...`);
+    logger.info(
+      `Starting historical replay for fixture ${fixtureId} with speed ${speed}x...`
+    );
 
     try {
-      logger.info(`Fetching historical score records for fixture ${fixtureId}...`);
+      logger.info(
+        `Fetching historical score records for fixture ${fixtureId}...`
+      );
       const response = await txLineClient.request<any[]>({
         url: `/scores/historical/${fixtureId}`,
       });
 
       if (!response || response.length === 0) {
-        logger.error(`No historical score records found for fixture ${fixtureId}`);
+        logger.error(
+          `No historical score records found for fixture ${fixtureId}`
+        );
         healthMonitor.setReplayMode(false);
         return;
       }
@@ -41,7 +51,9 @@ export class ReplayEngine {
         return seqA - seqB;
       });
 
-      logger.info(`✓ Loaded ${this.historicalRecords.length} historical updates for replay.`);
+      logger.info(
+        `✓ Loaded ${this.historicalRecords.length} historical updates for replay.`
+      );
       this.executeNextStep();
     } catch (err: any) {
       logger.error(`Failed to fetch historical replay data:`, err);
@@ -59,11 +71,42 @@ export class ReplayEngine {
     }
 
     const currentRecord = this.historicalRecords[this.currentStep];
-    logger.info(`Replaying step ${this.currentStep + 1}/${this.historicalRecords.length} | Seq: ${currentRecord.Seq ?? currentRecord.seq}`);
+    logger.info(
+      `Replaying step ${this.currentStep + 1}/${
+        this.historicalRecords.length
+      } | Seq: ${currentRecord.Seq ?? currentRecord.seq}`
+    );
 
     try {
       const normalizedScore = normalizeScoreEvent(currentRecord);
+      const isGoal =
+        normalizedScore.scoreOne > this.lastScoreOne ||
+        normalizedScore.scoreTwo > this.lastScoreTwo;
+      this.lastScoreOne = normalizedScore.scoreOne;
+      this.lastScoreTwo = normalizedScore.scoreTwo;
+
       riskAgent.handleScoreEvent(normalizedScore);
+
+      if (isGoal) {
+        logger.info(
+          `[REPLAY ENGINE] Synthesizing matching fresh repriced odds to reopen market...`
+        );
+        setTimeout(() => {
+          try {
+            const mockOdds = normalizeOddsUpdate({
+              fixtureId: normalizedScore.fixtureId,
+              seq: normalizedScore.seq + 1000,
+              ts: normalizedScore.ts + 5000,
+              SuperOddsType: "1X2_PARTICIPANT_RESULT",
+              PriceNames: ["part1", "draw", "part2"],
+              Prices: [1350, 4200, 8000],
+            });
+            riskAgent.handleOddsUpdate(mockOdds);
+          } catch (err) {
+            logger.error("Error handling synthesized odds update:", err);
+          }
+        }, 5000 / this.speedMultiplier);
+      }
     } catch (err) {
       logger.error("Error replaying score update:", err);
     }

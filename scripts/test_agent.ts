@@ -27,7 +27,9 @@ async function runTest() {
       oddsTwo: 5000,
     })
   );
-  logger.info(`Current state: ${market.state} | Odds: ${market.oddsOne}-${market.oddsDraw}-${market.oddsTwo}`);
+  logger.info(
+    `Current state: ${market.state} | Odds: ${market.oddsOne}-${market.oddsDraw}-${market.oddsTwo}`
+  );
 
   // 2. Send score event (Goal!)
   logger.info("\n--- Step 2: Goal detected! (Score TS: 1100, Score 1-0) ---");
@@ -42,10 +44,14 @@ async function runTest() {
       gameState: 2,
     })
   );
-  logger.info(`Current state: ${market.state} | Score: ${market.scoreOne}-${market.scoreTwo}`);
+  logger.info(
+    `Current state: ${market.state} | Score: ${market.scoreOne}-${market.scoreTwo}`
+  );
 
   // 3. Send stale odds update (TS: 1050)
-  logger.info("\n--- Step 3: Sending stale odds update (TS: 1050 <= Goal TS: 1100) ---");
+  logger.info(
+    "\n--- Step 3: Sending stale odds update (TS: 1050 <= Goal TS: 1100) ---"
+  );
   riskAgent.handleOddsUpdate(
     normalizeOddsUpdate({
       fixtureId,
@@ -59,12 +65,18 @@ async function runTest() {
   logger.info(`Current state: ${market.state} (Expected: HALTED)`);
 
   // 4. Wait for simulated proof to succeed (timeout is 4 seconds)
-  logger.info("\nWaiting 5 seconds for simulated on-chain proof to validate...");
+  logger.info(
+    "\nWaiting 5 seconds for simulated on-chain proof to validate..."
+  );
   await new Promise((resolve) => setTimeout(resolve, 5000));
-  logger.info(`Current state after waiting: ${market.state} (Expected: PROOF_PENDING since odds are still stale)`);
+  logger.info(
+    `Current state after waiting: ${market.state} (Expected: PROOF_PENDING since odds are still stale)`
+  );
 
   // 5. Send fresh odds update (TS: 1200)
-  logger.info("\n--- Step 4: Sending fresh odds update (TS: 1200 > Goal TS: 1100) ---");
+  logger.info(
+    "\n--- Step 4: Sending fresh odds update (TS: 1200 > Goal TS: 1100) ---"
+  );
   riskAgent.handleOddsUpdate(
     normalizeOddsUpdate({
       fixtureId,
@@ -78,7 +90,9 @@ async function runTest() {
   logger.info(`Current state: ${market.state} (Expected: OPEN)`);
 
   // 6. Send game finalised
-  logger.info("\n--- Step 5: Sending game finalisation (Score TS: 6000, Score 1-0) ---");
+  logger.info(
+    "\n--- Step 5: Sending game finalisation (Score TS: 6000, Score 1-0) ---"
+  );
   riskAgent.handleScoreEvent(
     normalizeScoreEvent({
       fixtureId,
@@ -96,7 +110,9 @@ async function runTest() {
   // 7. Wait for finalisation proof success
   logger.info("\nWaiting 5 seconds for final on-chain proof validation...");
   await new Promise((resolve) => setTimeout(resolve, 5000));
-  logger.info(`Current state: ${market.state} (Expected: SETTLED) | Outcome: ${market.settlementOutcome}`);
+  logger.info(
+    `Current state: ${market.state} (Expected: SETTLED) | Outcome: ${market.settlementOutcome}`
+  );
 
   logger.info("\n=== Risk Agent State Machine Test Finished ===");
 }

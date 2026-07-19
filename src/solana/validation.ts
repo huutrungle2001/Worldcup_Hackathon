@@ -9,10 +9,10 @@ export function toBytes32(value: string | number[] | Uint8Array): number[] {
   const bytes = Array.isArray(value)
     ? Uint8Array.from(value)
     : value instanceof Uint8Array
-      ? value
-      : value.startsWith("0x")
-        ? Buffer.from(value.slice(2), "hex")
-        : Buffer.from(value, "base64");
+    ? value
+    : value.startsWith("0x")
+    ? Buffer.from(value.slice(2), "hex")
+    : Buffer.from(value, "base64");
 
   if (bytes.length !== 32) {
     throw new Error(`Expected 32 bytes, received ${bytes.length}`);
@@ -21,20 +21,28 @@ export function toBytes32(value: string | number[] | Uint8Array): number[] {
   return Array.from(bytes);
 }
 
-export function toProofNodes(nodes: Array<{ hash: string | number[] | Uint8Array; isRightSibling: boolean }>) {
+export function toProofNodes(
+  nodes: Array<{
+    hash: string | number[] | Uint8Array;
+    isRightSibling: boolean;
+  }>
+) {
   return nodes.map((node) => ({
     hash: toBytes32(node.hash),
     isRightSibling: node.isRightSibling,
   }));
 }
 
-export interface ValidationReceipt {
-  signature: string;
-  pda: string;
-  fixtureId: number;
-  seq: number;
-  statKeys: string;
-  timestamp: string;
+export interface ProvedStat {
+  key: number;
+  value: number;
+  period: number;
+}
+
+export interface VerificationResult {
+  success: boolean;
+  signature?: string;
+  provedStats: ProvedStat[];
 }
 
 export class SolanaValidator {
@@ -55,12 +63,20 @@ export class SolanaValidator {
     seq: number,
     statKeys: string[],
     submitReceipt = true
-  ): Promise<string | boolean> {
-    logger.info(`Requesting stat proof from TxLINE for fixture ${fixtureId}, seq ${seq}, statKeys ${statKeys.join(",")}`);
+  ): Promise<VerificationResult> {
+    logger.info(
+      `Requesting stat proof from TxLINE for fixture ${fixtureId}, seq ${seq}, statKeys ${statKeys.join(
+        ","
+      )}`
+    );
 
     let validationData: any;
     try {
-      validationData = await txLineClient.getScoreProof(fixtureId, seq, statKeys.join(","));
+      validationData = await txLineClient.getScoreProof(
+        fixtureId,
+        seq,
+        statKeys.join(",")
+      );
       logger.info(`✓ Fetched proof successfully.`);
     } catch (err: any) {
       logger.error(`Failed to fetch validation proof:`, err);
@@ -71,6 +87,14 @@ export class SolanaValidator {
     const dailyScoresPda = this.deriveDailyScoresPda(minTs);
     logger.info(`Derived daily_scores_roots PDA: ${dailyScoresPda.toBase58()}`);
 
+    const provedStats: ProvedStat[] = validationData.statsToProve.map(
+      (stat: any) => ({
+        key: Number(stat.key ?? stat.Key ?? 0),
+        value: Number(stat.value ?? stat.Value ?? 0),
+        period: Number(stat.period ?? stat.Period ?? 0),
+      })
+    );
+
     const payload = {
       ts: new BN(minTs),
       fixtureSummary: {
@@ -80,7 +104,9 @@ export class SolanaValidator {
           minTimestamp: new BN(validationData.summary.updateStats.minTimestamp),
           maxTimestamp: new BN(validationData.summary.updateStats.maxTimestamp),
         },
-        eventsSubTreeRoot: toBytes32(validationData.summary.eventStatsSubTreeRoot),
+        eventsSubTreeRoot: toBytes32(
+          validationData.summary.eventStatsSubTreeRoot
+        ),
       },
       fixtureProof: toProofNodes(validationData.subTreeProof),
       mainTreeProof: toProofNodes(validationData.mainTreeProof),
@@ -93,7 +119,10 @@ export class SolanaValidator {
 
     let strategy: any;
     if (statKeys.length === 1) {
-      const val = validationData.statsToProve[0].value ?? validationData.statsToProve[0].Value ?? 0;
+      const val =
+        validationData.statsToProve[0].value ??
+        validationData.statsToProve[0].Value ??
+        0;
       strategy = {
         geometricTargets: [],
         distancePredicate: null,
@@ -110,8 +139,14 @@ export class SolanaValidator {
         ],
       };
     } else {
-      const val0 = validationData.statsToProve[0].value ?? validationData.statsToProve[0].Value ?? 0;
-      const val1 = validationData.statsToProve[1].value ?? validationData.statsToProve[1].Value ?? 0;
+      const val0 =
+        validationData.statsToProve[0].value ??
+        validationData.statsToProve[0].Value ??
+        0;
+      const val1 =
+        validationData.statsToProve[1].value ??
+        validationData.statsToProve[1].Value ??
+        0;
       const diff = val0 - val1;
       strategy = {
         geometricTargets: [],
@@ -147,29 +182,39 @@ export class SolanaValidator {
         .view();
 
       if (!isValid) {
-        logger.error(`Validation simulation returned false. Predicate check failed.`);
-        return false;
+        logger.error(
+          `Validation simulation returned false. Predicate check failed.`
+        );
+        return { success: false, provedStats };
       }
       logger.info(`✓ Validation simulation passed successfully!`);
 
       if (!submitReceipt) {
-        return true;
+        return { success: true, provedStats };
       }
     } catch (err: any) {
       logger.error(`On-chain simulation error:`, err);
       healthMonitor.updateService("solanaRpc", "UNHEALTHY", err.message);
-      return false;
+      return { success: false, provedStats };
     }
 
     const walletBalance = await connection.getBalance(walletKeypair.publicKey);
-    logger.info(`Current wallet balance before validation receipt: ${walletBalance / 1e9} SOL`);
+    logger.info(
+      `Current wallet balance before validation receipt: ${
+        walletBalance / 1e9
+      } SOL`
+    );
 
     if (walletBalance < 10000000) {
-      logger.warn(`Wallet balance is too low for receipt transaction. Falling back to view simulation.`);
-      return true;
+      logger.warn(
+        `Wallet balance is too low for receipt transaction. Falling back to view simulation.`
+      );
+      return { success: true, provedStats };
     }
 
-    logger.info("Submitting validation receipt transaction (skipPreflight: false)...");
+    logger.info(
+      "Submitting validation receipt transaction (skipPreflight: false)..."
+    );
     try {
       const txSig = await program.methods
         .validateStatV2(payload, strategy)
@@ -179,9 +224,11 @@ export class SolanaValidator {
         .preInstructions([computeBudgetIx])
         .rpc();
 
-      logger.info(`✓ Validation receipt transaction successful! Signature: ${txSig}`);
+      logger.info(
+        `✓ Validation receipt transaction successful! Signature: ${txSig}`
+      );
       healthMonitor.updateService("solanaRpc", "HEALTHY");
-      return txSig;
+      return { success: true, signature: txSig, provedStats };
     } catch (err: any) {
       logger.error("Transaction submission failed:", err);
       healthMonitor.updateService("solanaRpc", "UNHEALTHY", err.message);

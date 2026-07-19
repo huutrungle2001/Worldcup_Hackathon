@@ -12,6 +12,6 @@
     "typeRoots": ["./node_modules/@types", "./types"],
     "types": ["node"]
   },
-  "include": ["app/**/*", "types/**/*"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*", "scripts/**/*", "types/**/*"],
+  "exclude": ["node_modules", "dashboard"]
 }

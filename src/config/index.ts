@@ -50,7 +50,10 @@ export class AppConfig {
 
     if (rpcUrlEnv.includes("devnet")) {
       this.network = "devnet";
-    } else if (rpcUrlEnv.includes("mainnet") || rpcUrlEnv.includes("api.mainnet")) {
+    } else if (
+      rpcUrlEnv.includes("mainnet") ||
+      rpcUrlEnv.includes("api.mainnet")
+    ) {
       this.network = "mainnet";
     } else {
       this.network = "devnet";
