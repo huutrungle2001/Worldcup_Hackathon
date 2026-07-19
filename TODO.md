@@ -16,7 +16,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 | M0 — Architecture gate | Complete | Owner approves MVP and network decisions |
 | M1 — Foundation | Complete | Local build, lint, typecheck, and tests pass |
 | M2 — TxLINE connection | Complete | Snapshots and both SSE streams remain healthy |
-| M3 — Autonomous agent | Not started | Goal event halts the market exactly once |
+| M3 — Autonomous agent | Complete | Goal event halts the market exactly once |
 | M4 — Verification | Not started | Real proof passes `validateStatV2` on devnet |
 | M5 — Product UI | Not started | Live/replay end-to-end flow is visible |
 | M6 — Hardening and release | Not started | Public build and submission materials are ready |
@@ -133,45 +133,45 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 ### Domain Model
 
-- [ ] **PG-301:** Define market states `OPEN`, `HALTED`, `PROOF_PENDING`, `FINAL_PROOF_PENDING`, and `SETTLED`.
-- [ ] **PG-302:** Define explicit transition reason codes.
-- [ ] **PG-303:** Define an append-only audit-event schema.
-- [ ] **PG-304:** Store the current market state and bounded audit history behind a single state-store interface.
-- [ ] **PG-305:** Make transition commands idempotent using the triggering event key.
+- [x] **PG-301:** Define market states `OPEN`, `HALTED`, `PROOF_PENDING`, `FINAL_PROOF_PENDING`, and `SETTLED`.
+- [x] **PG-302:** Define explicit transition reason codes.
+- [x] **PG-303:** Define an append-only audit-event schema.
+- [x] **PG-304:** Store the current market state and bounded audit history behind a single state-store interface.
+- [x] **PG-305:** Make transition commands idempotent using the triggering event key.
 
 ### Goal Rule
 
-- [ ] **PG-306:** Identify confirmed goal score records using documented soccer-feed semantics.
-- [ ] **PG-307:** Map the scoring participant to full-game stat key `1` or `2`.
-- [ ] **PG-308:** On a new confirmed goal, transition `OPEN` to `HALTED` immediately.
-- [ ] **PG-309:** Record event-to-halt latency using monotonic local timing where possible.
-- [ ] **PG-310:** Start proof orchestration automatically after the halt.
-- [ ] **PG-311:** Keep the market halted when a goal arrives while another proof is pending.
+- [x] **PG-306:** Identify confirmed goal score records using documented soccer-feed semantics.
+- [x] **PG-307:** Map the scoring participant to full-game stat key `1` or `2`.
+- [x] **PG-308:** On a new confirmed goal, transition `OPEN` to `HALTED` immediately.
+- [x] **PG-309:** Record event-to-halt latency using monotonic local timing where possible.
+- [x] **PG-310:** Start proof orchestration automatically after the halt.
+- [x] **PG-311:** Keep the market halted when a goal arrives while another proof is pending.
 
 ### Odds Correlation and Reopening
 
-- [ ] **PG-312:** Track the latest odds timestamp and market suspension state for the selected fixture.
-- [ ] **PG-313:** Detect whether a newer odds update arrived after the goal event.
-- [ ] **PG-314:** Calculate score-event-to-odds-update latency.
-- [ ] **PG-315:** Reopen only when the goal proof is valid and a newer usable odds update exists.
-- [ ] **PG-316:** Keep the market halted if the odds stream is stale or disconnected.
+- [x] **PG-312:** Track the latest odds timestamp and market suspension state for the selected fixture.
+- [x] **PG-313:** Detect whether a newer odds update arrived after the goal event.
+- [x] **PG-314:** Calculate score-event-to-odds-update latency.
+- [x] **PG-315:** Reopen only when the goal proof is valid and a newer usable odds update exists.
+- [x] **PG-316:** Keep the market halted if the odds stream is stale or disconnected.
 
 ### Finalisation Rule
 
-- [ ] **PG-317:** Detect `action=game_finalised` records.
-- [ ] **PG-318:** Require `statusId=100` and `period=100` for final settlement.
-- [ ] **PG-319:** Transition to `FINAL_PROOF_PENDING` and request both total-goal stat keys `1,2`.
-- [ ] **PG-320:** Determine participant-one win, participant-two win, or draw only from validated goal values.
-- [ ] **PG-321:** Transition to `SETTLED` exactly once after successful validation.
-- [ ] **PG-322:** Reject reopening and later mutation of a settled market.
+- [x] **PG-317:** Detect `action=game_finalised` records.
+- [x] **PG-318:** Require `statusId=100` and `period=100` for final settlement.
+- [x] **PG-319:** Transition to `FINAL_PROOF_PENDING` and request both total-goal stat keys `1,2`.
+- [x] **PG-320:** Determine participant-one win, participant-two win, or draw only from validated goal values.
+- [x] **PG-321:** Transition to `SETTLED` exactly once after successful validation.
+- [x] **PG-322:** Reject reopening and later mutation of a settled market.
 
 ### M3 Acceptance
 
-- [ ] A goal halts an open market without operator input.
-- [ ] Replaying the same sequence cannot halt twice.
-- [ ] A newer unverified odds update cannot reopen the market by itself.
-- [ ] Disconnected or stale odds keep the market halted.
-- [ ] A valid finalised event can settle only once.
+- [x] A goal halts an open market without operator input.
+- [x] Replaying the same sequence cannot halt twice.
+- [x] A newer unverified odds update cannot reopen the market by itself.
+- [x] Disconnected or stale odds keep the market halted.
+- [x] A valid finalised event can settle only once.
 
 ## M4 — Proof Retrieval and Solana Validation
 
