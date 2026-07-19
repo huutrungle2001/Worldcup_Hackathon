@@ -718,6 +718,14 @@ export default function Dashboard() {
                         : "None"}
                     </span>
                   </div>
+                  {activeReceipt.proofTimestamp > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Proof Timestamp:</span>
+                      <span className="text-slate-300">
+                        {new Date(activeReceipt.proofTimestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
                   {activeReceipt.pda && (
                     <div className="flex justify-between">
                       <span className="text-slate-400">Roots PDA:</span>
@@ -752,6 +760,7 @@ export default function Dashboard() {
                       {new Date(activeReceipt.validatedAt).toLocaleTimeString()}
                     </span>
                     {activeReceipt.status === "CONFIRMED" &&
+                      activeReceipt.signature &&
                       activeReceipt.explorerUrl && (
                         <a
                           href={activeReceipt.explorerUrl}

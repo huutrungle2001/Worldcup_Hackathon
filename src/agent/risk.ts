@@ -2,7 +2,7 @@ import { NormalizedScoreEvent, NormalizedOddsUpdate } from "../domain/types";
 import { marketManager, VirtualMarket } from "./market";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
-import { solanaValidator, ProvedStat, ExpectedStat, receiptStore } from "../solana/validation";
+import { solanaValidator, ProvedStat, ExpectedStat } from "../solana/validation";
 
 export class RiskAgent {
   private haltTriggers: Map<number, NormalizedScoreEvent> = new Map();
@@ -36,8 +36,14 @@ export class RiskAgent {
         { fixtureId: event.fixtureId, seq: event.seq }
       );
 
+      const expectedStats: ExpectedStat[] = [
+        { key: 1, value: event.scoreOne },
+        { key: 2, value: event.scoreTwo },
+      ];
+
       market.pendingVerificationSeq = event.seq;
       market.pendingVerificationType = "FINAL";
+      market.pendingVerificationExpectedStats = expectedStats;
 
       marketManager.transitionTo(
         market,
@@ -46,10 +52,6 @@ export class RiskAgent {
         event.eventKey,
         `Final match result finalisation observed. Score: ${event.scoreOne}-${event.scoreTwo}.`
       );
-      const expectedStats: ExpectedStat[] = [
-        { key: 1, value: event.scoreOne },
-        { key: 2, value: event.scoreTwo },
-      ];
       this.triggerOnChainValidation(event, expectedStats);
       return;
     }
@@ -66,18 +68,6 @@ export class RiskAgent {
         { fixtureId: event.fixtureId, seq: event.seq }
       );
 
-      market.pendingVerificationSeq = event.seq;
-      market.pendingVerificationType = "GOAL";
-
-      this.haltTriggers.set(event.fixtureId, event);
-      marketManager.transitionTo(
-        market,
-        "HALTED",
-        "GOAL_DETECTED",
-        event.eventKey,
-        `Goal detected. Action: ${event.action}. Score changed to ${event.scoreOne}-${event.scoreTwo}.`
-      );
-
       const keyToVerify =
         event.scoreOne > oldScoreOne
           ? 1
@@ -91,6 +81,20 @@ export class RiskAgent {
       const expectedStats: ExpectedStat[] = [
         { key: keyToVerify, value: valueToVerify },
       ];
+
+      market.pendingVerificationSeq = event.seq;
+      market.pendingVerificationType = "GOAL";
+      market.pendingVerificationExpectedStats = expectedStats;
+
+      this.haltTriggers.set(event.fixtureId, event);
+      marketManager.transitionTo(
+        market,
+        "HALTED",
+        "GOAL_DETECTED",
+        event.eventKey,
+        `Goal detected. Action: ${event.action}. Score changed to ${event.scoreOne}-${event.scoreTwo}.`
+      );
+
       this.triggerOnChainValidation(event, expectedStats);
     }
   }
@@ -174,14 +178,10 @@ export class RiskAgent {
     logger.info(
       `Registering successful on-chain proof verification for fixture ${fixtureId}, sequence ${seq}`
     );
-    if (!this.verifiedSequences.has(fixtureId)) {
-      this.verifiedSequences.set(fixtureId, new Set());
-    }
-    this.verifiedSequences.get(fixtureId)!.add(seq);
 
     const market = marketManager.getOrCreateMarket(fixtureId);
 
-    // Bind proof completion to its exact pending transition (Finding 2)
+    // 1. Bind proof completion to its exact pending transition (Finding 2)
     if (market.pendingVerificationSeq !== seq) {
       logger.warn(
         `Received verification success for seq ${seq}, but market for fixture ${fixtureId} is expecting seq ${market.pendingVerificationSeq}. Ignoring.`
@@ -189,9 +189,30 @@ export class RiskAgent {
       return;
     }
 
+    // 2. Finding 1: Ensure proved stats contain ALL expected pending keys and matching values
+    if (market.pendingVerificationExpectedStats) {
+      for (const expected of market.pendingVerificationExpectedStats) {
+        const matched = provedStats.find(
+          (p) => p.key === expected.key && p.value === expected.value
+        );
+        if (!matched) {
+          logger.warn(
+            `Received verification success for seq ${seq}, but proved stats do not match expected key ${expected.key} (expected ${expected.value}). Ignoring and keeping market pending.`
+          );
+          return;
+        }
+      }
+    }
+
+    if (!this.verifiedSequences.has(fixtureId)) {
+      this.verifiedSequences.set(fixtureId, new Set());
+    }
+    this.verifiedSequences.get(fixtureId)!.add(seq);
+
     const verificationType = market.pendingVerificationType;
     market.pendingVerificationSeq = undefined;
     market.pendingVerificationType = undefined;
+    market.pendingVerificationExpectedStats = undefined;
 
     if (verificationType === "GOAL") {
       marketManager.transitionTo(
@@ -202,12 +223,19 @@ export class RiskAgent {
         `On-chain validation succeeded for seq ${seq}. Awaiting newer repriced odds...`
       );
     } else if (verificationType === "FINAL") {
-      // Calculate winner from verified goals, not unverified stream scores (Finding 3)
+      // Finding 1: Settle ONLY when both participant totals are fully proved. Never fall back to unproved scores.
       const goal1Stat = provedStats.find((s) => s.key === 1);
       const goal2Stat = provedStats.find((s) => s.key === 2);
 
-      const scoreOneProved = goal1Stat ? goal1Stat.value : market.scoreOne;
-      const scoreTwoProved = goal2Stat ? goal2Stat.value : market.scoreTwo;
+      if (!goal1Stat || !goal2Stat) {
+        logger.error(
+          `Incomplete proved stats for final settlement of fixture ${fixtureId}: key 1 or key 2 missing. Market remains pending.`
+        );
+        return;
+      }
+
+      const scoreOneProved = goal1Stat.value;
+      const scoreTwoProved = goal2Stat.value;
 
       logger.info(
         `Settling market using verified scores: ${scoreOneProved}-${scoreTwoProved} (raw was ${market.scoreOne}-${market.scoreTwo})`
@@ -260,20 +288,8 @@ export class RiskAgent {
           value: s.value,
           period: 0,
         }));
-        receiptStore.addReceipt({
-          id: `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          fixtureId: event.fixtureId,
-          seq: event.seq,
-          expectedStats,
-          provedStats: mockProvedStats,
-          proofTimestamp: event.ts,
-          pda: solanaValidator.deriveDailyScoresPda(event.ts).toBase58(),
-          programId: "TxOracle111111111111111111111111111111111111",
-          network: "devnet",
-          status: "SIMULATED",
-          mode: "SIMULATION",
-          validatedAt: new Date().toISOString(),
-        });
+        // NOTE: In TEST_MODE, we simulate the callback internally for state machine tests,
+        // but do NOT add a public receipt labeled SIMULATED (Finding 3).
         this.registerVerificationSuccess(
           event.fixtureId,
           event.seq,

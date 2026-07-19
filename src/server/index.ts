@@ -54,21 +54,19 @@ app.get("/api/receipts", (req, res) => {
   const rawFixtureId = req.query.fixtureId;
   let fixtureId: number | undefined;
 
-  if (
-    rawFixtureId !== undefined &&
-    rawFixtureId !== null &&
-    rawFixtureId !== ""
-  ) {
-    fixtureId = Number(rawFixtureId);
+  if (rawFixtureId !== undefined) {
     if (
-      !Number.isFinite(fixtureId) ||
-      fixtureId <= 0 ||
-      !Number.isInteger(fixtureId)
+      typeof rawFixtureId !== "string" ||
+      rawFixtureId.trim() === "" ||
+      isNaN(Number(rawFixtureId)) ||
+      !Number.isInteger(Number(rawFixtureId)) ||
+      Number(rawFixtureId) <= 0
     ) {
       return res
         .status(400)
         .json({ error: "Invalid fixtureId filter. Must be a positive integer." });
     }
+    fixtureId = Number(rawFixtureId);
   }
 
   const receipts = receiptStore.getReceipts(fixtureId);

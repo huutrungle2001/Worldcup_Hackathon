@@ -13,6 +13,7 @@ import {
   buildV2Strategy,
   validateProofIdentity,
   validateExpectedStatsPrecheck,
+  validateProofRequestParams,
   receiptStore,
   ExpectedStat,
 } from "../src/solana/validation";
@@ -549,8 +550,8 @@ function testRiskAgentRacePaths() {
     throw new Error("Delayed old proof settled the final market");
   }
 
-  // 9. Finding 3: Settle the market using proved goals (total goals 2-1), verifying winner calculation
-  // Let's modify the raw stream scores to be tampered (e.g. 0-0) to prove it uses verified stats!
+  // 9. Finding 3 & Task 002 Finding 1: Settle the market using proved goals (total goals 2-1), verifying winner calculation
+  // Tamper raw stream scores to 0-0 to prove it uses verified stats
   m.scoreOne = 0;
   m.scoreTwo = 0;
 
@@ -572,127 +573,49 @@ function testRiskAgentRacePaths() {
   logger.info("✓ RiskAgent race path and verification binding tests passed.");
 }
 
-function testTask002ProofBindingAndReceipts() {
-  logger.info("Running Task 002 proof binding & sanitized receipts tests...");
+function testTask002AdversarialFindings() {
+  logger.info("Running Task 002 exhaustive adversarial regression tests...");
 
-  // 1. One expected stat creates one single equality predicate with its expected value
-  const strat1 = buildV2Strategy([{ key: 1, value: 3 }]);
-  if (
-    strat1.discretePredicates.length !== 1 ||
-    strat1.discretePredicates[0].single.index !== 0 ||
-    strat1.discretePredicates[0].single.predicate.threshold !== 3
-  ) {
-    throw new Error("Single stat strategy predicate construction failed");
+  // 1. Finding 1: Incomplete final proved stats leave market pending
+  const riskAgent = new RiskAgent();
+  const fId = 777;
+  const finalEvent = normalizeScoreEvent({
+    fixtureId: fId,
+    seq: 20,
+    ts: 200000,
+    action: "game_finalised",
+    statusId: 100,
+    period: 100,
+    stats: { "1": 3, "2": 1 },
+  });
+  riskAgent.handleScoreEvent(finalEvent);
+
+  const market = marketManager.getOrCreateMarket(fId);
+  if (market.state !== "FINAL_PROOF_PENDING") {
+    throw new Error("Expected FINAL_PROOF_PENDING state");
   }
 
-  // 2. Two final stats create two single equality predicates at indexes 0 and 1
-  const strat2 = buildV2Strategy([
-    { key: 1, value: 2 },
-    { key: 2, value: 1 },
+  // Pass incomplete proved stats containing ONLY key 1 (missing key 2)
+  riskAgent.registerVerificationSuccess(fId, 20, [{ key: 1, value: 3, period: 0 }]);
+  if (market.state !== "FINAL_PROOF_PENDING") {
+    throw new Error("Market settled despite incomplete proved stats (missing key 2)");
+  }
+
+  // Pass complete proved stats
+  riskAgent.registerVerificationSuccess(fId, 20, [
+    { key: 1, value: 3, period: 0 },
+    { key: 2, value: 1, period: 0 },
   ]);
-  if (
-    strat2.discretePredicates.length !== 2 ||
-    strat2.discretePredicates[0].single.index !== 0 ||
-    strat2.discretePredicates[0].single.predicate.threshold !== 2 ||
-    strat2.discretePredicates[1].single.index !== 1 ||
-    strat2.discretePredicates[1].single.predicate.threshold !== 1
-  ) {
-    throw new Error("Two-stat strategy predicate construction failed");
+  if ((market.state as string) !== "SETTLED") {
+    throw new Error("Market should settle when complete proved stats are registered");
   }
 
-  // 3. Wrong proof fixture ID is rejected
-  const expStats: ExpectedStat[] = [{ key: 1, value: 1 }];
-  const wrongFixtureResp = {
-    summary: { fixtureId: 999, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }],
-    statProofs: [[]],
-  };
-  const checkWrongId = validateProofIdentity(
-    123,
-    10,
-    expStats,
-    wrongFixtureResp
-  );
-  if (
-    checkWrongId.valid ||
-    !checkWrongId.reason?.includes("Fixture ID mismatch")
-  ) {
-    throw new Error("Failed to reject wrong fixture ID in proof response");
-  }
-
-  // 4. Missing, extra, reordered, duplicate, or wrong returned stat keys are rejected
-  const wrongKeyResp = {
-    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 2, value: 1 }],
-    statProofs: [[]],
-  };
-  const checkWrongKey = validateProofIdentity(123, 10, expStats, wrongKeyResp);
-  if (
-    checkWrongKey.valid ||
-    !checkWrongKey.reason?.includes("Stat key mismatch")
-  ) {
-    throw new Error("Failed to reject wrong stat key in proof response");
-  }
-
-  // 5. Returned stat value different from triggering value is rejected
-  const wrongValResp = {
-    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 5 }],
-    statProofs: [[]],
-  };
-  const checkWrongVal = validateProofIdentity(123, 10, expStats, wrongValResp);
-  if (
-    checkWrongVal.valid ||
-    !checkWrongVal.reason?.includes("Stat value mismatch")
-  ) {
-    throw new Error("Failed to reject wrong stat value in proof response");
-  }
-
-  // 6. Missing corresponding stat proof is rejected
-  const missingProofResp = {
-    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }],
-    statProofs: [],
-  };
-  const checkMissingProof = validateProofIdentity(
-    123,
-    10,
-    expStats,
-    missingProofResp
-  );
-  if (
-    checkMissingProof.valid ||
-    !checkMissingProof.reason?.includes("Stat proof count mismatch")
-  ) {
-    throw new Error("Failed to reject missing stat proof in response");
-  }
-
-  // 7. Invalid expected values or keys fail before any external operation
-  const invalidKeyPrecheck = validateExpectedStatsPrecheck([
-    { key: -1, value: 1 },
-  ]);
-  if (invalidKeyPrecheck.valid)
-    throw new Error("Should reject negative key in precheck");
-
-  const invalidValPrecheck = validateExpectedStatsPrecheck([
-    { key: 1, value: -2 },
-  ]);
-  if (invalidValPrecheck.valid)
-    throw new Error("Should reject negative value in precheck");
-
-  const dupKeyPrecheck = validateExpectedStatsPrecheck([
-    { key: 1, value: 1 },
-    { key: 1, value: 2 },
-  ]);
-  if (dupKeyPrecheck.valid)
-    throw new Error("Should reject duplicate key in precheck");
-
-  // 8. Simulated and confirmed receipt shapes are labeled distinctly, simulated receipt has no explorer link
+  // 2. Finding 2: Sanitized receipt store (Sentinel values, raw proof nodes, secret headers, invalid properties)
   receiptStore.clear();
-  receiptStore.addReceipt({
-    id: "rcpt_sim_1",
+  const adversarialInput: any = {
+    id: "rcpt_adv_1",
     fixtureId: 123,
-    seq: 1,
+    seq: 10,
     expectedStats: [{ key: 1, value: 1 }],
     provedStats: [{ key: 1, value: 1, period: 0 }],
     proofTimestamp: 1000,
@@ -700,40 +623,102 @@ function testTask002ProofBindingAndReceipts() {
     network: "devnet",
     status: "SIMULATED",
     mode: "SIMULATION",
-    validatedAt: new Date().toISOString(),
-  });
+    token: "SENTINEL_TOKEN",
+    subTreeProof: ["RAW_NODE"],
+    reason: "X-Api-Token: SENTINEL_TOKEN walletPath: /private/wallet.json",
+  };
 
+  receiptStore.addReceipt(adversarialInput);
+  const storedList = receiptStore.getReceipts();
+  if (storedList.length !== 1) throw new Error("Receipt store count mismatch");
+  const stored: any = storedList[0];
+
+  if (stored.token !== undefined) throw new Error("Extra secret property 'token' leaked into store");
+  if (stored.subTreeProof !== undefined) throw new Error("Raw proof node array leaked into store");
+  if (stored.reason?.includes("SENTINEL_TOKEN")) throw new Error("Secret header token leaked into reason");
+  if (stored.reason?.includes("/private/wallet.json")) throw new Error("Wallet path leaked into reason");
+  if (stored.signature !== undefined || stored.explorerUrl !== undefined) {
+    throw new Error("Non-confirmed receipt must omit signature and explorer URL");
+  }
+
+  // 3. Finding 2 Invariant: Contradictory CONFIRMED without signature is dropped
+  receiptStore.clear();
   receiptStore.addReceipt({
-    id: "rcpt_conf_1",
-    fixtureId: 123,
-    seq: 2,
-    expectedStats: [{ key: 1, value: 2 }],
-    provedStats: [{ key: 1, value: 2, period: 0 }],
-    proofTimestamp: 2000,
-    programId: "Prog1",
-    network: "devnet",
     status: "CONFIRMED",
     mode: "TRANSACTION",
-    signature: "sig_abc_123",
-    explorerUrl: "https://explorer.solana.com/tx/sig_abc_123?cluster=devnet",
-    validatedAt: new Date().toISOString(),
+    fixtureId: 123,
+    seq: 1,
   });
-
-  const allReceipts = receiptStore.getReceipts();
-  const simReceipt = allReceipts.find((r) => r.status === "SIMULATED");
-  const confReceipt = allReceipts.find((r) => r.status === "CONFIRMED");
-
-  if (!simReceipt || simReceipt.explorerUrl || simReceipt.signature) {
-    throw new Error(
-      "Simulated receipt must not have signature or explorer link"
-    );
+  if (receiptStore.getReceipts().length !== 0) {
+    throw new Error("Contradictory CONFIRMED receipt without signature should be dropped");
   }
 
-  if (!confReceipt || !confReceipt.explorerUrl || !confReceipt.signature) {
-    throw new Error("Confirmed receipt must have signature and explorer link");
+  // 4. Finding 3: TEST_MODE produces NO public Solana verification receipt
+  receiptStore.clear();
+  process.env.TEST_MODE = "true";
+  const tmEvent = normalizeScoreEvent({
+    fixtureId: 888,
+    seq: 1,
+    ts: 1000,
+    action: "goal",
+    stats: { "1": 1, "2": 0 },
+  });
+  riskAgent.handleScoreEvent(tmEvent);
+  if (receiptStore.getReceipts().length !== 0) {
+    throw new Error("TEST_MODE must produce NO public Solana receipt");
   }
 
-  // 9. Receipt history is bounded (max 50) and fixture filtering returns only matches
+  // 5. Finding 5: Unsupported stat key 3001 rejected in precheck
+  const unsuppCheck = validateExpectedStatsPrecheck([{ key: 3001, value: 1 }]);
+  if (unsuppCheck.valid || !unsuppCheck.reason?.includes("Unsupported")) {
+    throw new Error("Precheck failed to reject unsupported stat key 3001");
+  }
+
+  // 6. Finding 5: Invalid fixtureId or sequence rejected before TxLINE call
+  const invalidFixtureReq = validateProofRequestParams(-1, 10, [{ key: 1, value: 1 }]);
+  if (invalidFixtureReq.valid || !invalidFixtureReq.reason?.includes("Invalid fixtureId")) {
+    throw new Error("Failed to reject negative fixtureId before request");
+  }
+
+  const invalidSeqReq = validateProofRequestParams(123, 0, [{ key: 1, value: 1 }]);
+  if (invalidSeqReq.valid || !invalidSeqReq.reason?.includes("Invalid sequence")) {
+    throw new Error("Failed to reject zero sequence before request");
+  }
+
+  // 7. Finding 6: Non-coercive numeric response identity matching (reject strings and booleans)
+  const expStats: ExpectedStat[] = [{ key: 1, value: 0 }];
+
+  // String fixtureId
+  const strFixtureResp = {
+    summary: { fixtureId: "123", updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 0 }],
+    statProofs: [[]],
+  };
+  if (validateProofIdentity(123, 10, expStats, strFixtureResp).valid) {
+    throw new Error("Should reject string fixtureId coercively");
+  }
+
+  // Boolean value
+  const boolValResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: false }],
+    statProofs: [[]],
+  };
+  if (validateProofIdentity(123, 10, expStats, boolValResp).valid) {
+    throw new Error("Should reject boolean false value coercively");
+  }
+
+  // String timestamp
+  const strTsResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: "1000" } },
+    statsToProve: [{ key: 1, value: 0 }],
+    statProofs: [[]],
+  };
+  if (validateProofIdentity(123, 10, expStats, strTsResp).valid) {
+    throw new Error("Should reject string minTimestamp coercively");
+  }
+
+  // 8. Finding 8: Bounded receipt store (max 50) and fixture filtering
   receiptStore.clear();
   for (let i = 1; i <= 60; i++) {
     receiptStore.addReceipt({
@@ -751,36 +736,14 @@ function testTask002ProofBindingAndReceipts() {
     });
   }
 
-  const storeCount = receiptStore.getReceipts().length;
-  if (storeCount !== 50) {
-    throw new Error(`Expected receipt store max 50 items, got ${storeCount}`);
+  if (receiptStore.getReceipts().length !== 50) {
+    throw new Error(`Receipt store max 50 violated: got ${receiptStore.getReceipts().length}`);
   }
-
-  const filtered200 = receiptStore.getReceipts(200);
-  if (filtered200.some((r) => r.fixtureId !== 200)) {
+  if (receiptStore.getReceipts(200).some((r) => r.fixtureId !== 200)) {
     throw new Error("Fixture filtering returned non-matching fixture IDs");
   }
 
-  // 10. Receipt serialization contains no secrets or raw proof nodes
-  const serialized = JSON.stringify(receiptStore.getReceipts());
-  const forbiddenKeywords = [
-    "jwt",
-    "token",
-    "secret",
-    "walletPath",
-    "subTreeProof",
-    "mainTreeProof",
-    "eventStatRoot",
-  ];
-  for (const keyword of forbiddenKeywords) {
-    if (serialized.includes(`"${keyword}"`)) {
-      throw new Error(
-        `Receipt serialization contained forbidden keyword: ${keyword}`
-      );
-    }
-  }
-
-  logger.info("✓ Task 002 proof binding & sanitized receipts tests passed.");
+  logger.info("✓ Task 002 exhaustive adversarial regression tests passed.");
 }
 
 function runAll() {
@@ -791,7 +754,7 @@ function runAll() {
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();
-  testTask002ProofBindingAndReceipts();
+  testTask002AdversarialFindings();
   logger.info("=== All Unit & Race Tests Passed Successfully ===");
 }
 

@@ -38,6 +38,7 @@ export interface VirtualMarket {
     | "UNKNOWN";
   pendingVerificationSeq?: number;
   pendingVerificationType?: "GOAL" | "FINAL";
+  pendingVerificationExpectedStats?: Array<{ key: number; value: number }>;
   auditTrail: AuditEvent[];
 }
 

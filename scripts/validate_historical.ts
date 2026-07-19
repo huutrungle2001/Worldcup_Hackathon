@@ -2,12 +2,21 @@ import { txLineClient } from "../src/txline/api";
 import { solanaValidator, ExpectedStat } from "../src/solana/validation";
 import { logger } from "../src/utils/logger";
 
+function extractStat1Value(record: any): number | null {
+  if (!record || typeof record !== "object") return null;
+  const raw = record.Stats?.["1"] ?? record.scoreOne ?? record.ScoreOne;
+  if (raw !== undefined && raw !== null && typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
+    return raw;
+  }
+  return null;
+}
+
 async function run() {
   logger.info("Starting dynamic historical validation check on devnet...");
 
   let targetFixtureId = 0;
   let targetSeq = 0;
-  let targetScoreValue = 0;
+  let targetScoreValue: number | null = null;
 
   const now = new Date();
   for (let i = 0; i < 24; i++) {
@@ -25,13 +34,16 @@ async function run() {
       });
 
       if (updates && updates.length > 0) {
-        const record = updates.find((r) => (r.Seq ?? r.seq) > 0);
+        const record = updates.find((r) => {
+          const s = r.Seq ?? r.seq;
+          const stat1 = extractStat1Value(r);
+          return Number.isInteger(s) && s > 0 && stat1 !== null;
+        });
+
         if (record) {
           targetFixtureId = record.FixtureId ?? record.fixtureId;
           targetSeq = record.Seq ?? record.seq;
-          targetScoreValue = Number(
-            record.Stats?.["1"] ?? record.scoreOne ?? record.ScoreOne ?? 0
-          );
+          targetScoreValue = extractStat1Value(record);
           logger.info(
             `✓ Found active update! Fixture: ${targetFixtureId}, Seq: ${targetSeq}, ScoreVal: ${targetScoreValue}`
           );
@@ -56,13 +68,15 @@ async function run() {
           snapshot.scoreRecords &&
           snapshot.scoreRecords.length > 0
         ) {
-          const record = snapshot.scoreRecords.find((r: any) => r.seq > 0);
+          const record = snapshot.scoreRecords.find((r: any) => {
+            const s = r.seq ?? r.Seq;
+            const stat1 = extractStat1Value(r);
+            return Number.isInteger(s) && s > 0 && stat1 !== null;
+          });
           if (record) {
             targetFixtureId = f.fixtureId;
-            targetSeq = record.seq;
-            targetScoreValue = Number(
-              record.Stats?.["1"] ?? record.scoreOne ?? record.ScoreOne ?? 0
-            );
+            targetSeq = record.seq ?? record.Seq;
+            targetScoreValue = extractStat1Value(record);
             logger.info(
               `✓ Found score record in snapshot! Fixture: ${targetFixtureId}, Seq: ${targetSeq}, ScoreVal: ${targetScoreValue}`
             );
@@ -75,13 +89,11 @@ async function run() {
     }
   }
 
-  if (targetFixtureId === 0) {
-    targetFixtureId = 18175981;
-    targetSeq = 991;
-    targetScoreValue = 0;
-    logger.info(
-      `No live fixtures found. Using fallback historical fixture: ${targetFixtureId}, Seq: ${targetSeq}`
+  if (targetFixtureId === 0 || targetSeq === 0 || targetScoreValue === null) {
+    logger.error(
+      "No active score record with a valid finite, non-negative stat key 1 value found on devnet. Exiting historical validation check."
     );
+    process.exit(1);
   }
 
   const expectedStats: ExpectedStat[] = [
