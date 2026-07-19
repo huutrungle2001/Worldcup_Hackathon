@@ -205,7 +205,8 @@ app.post("/api/replay/speed", demoReplayGate, (req, res) => {
 });
 
 export function startServer() {
-  app.listen(PORT, () => {
-    logger.info(`Express server running on port ${PORT}`);
+  const numericPort = Number(PORT);
+  app.listen(numericPort, "0.0.0.0", () => {
+    logger.info(`Express server running on port ${numericPort} on host 0.0.0.0`);
   });
 }
