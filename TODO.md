@@ -13,7 +13,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 | Milestone | Status | Exit condition |
 |---|---|---|
-| M0 — Architecture gate | In progress | Owner approves MVP and network decisions |
+| M0 — Architecture gate | Complete | Owner approves MVP and network decisions |
 | M1 — Foundation | Not started | Local build, lint, typecheck, and tests pass |
 | M2 — TxLINE connection | Not started | Snapshots and both SSE streams remain healthy |
 | M3 — Autonomous agent | Not started | Goal event halts the market exactly once |
@@ -28,11 +28,11 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 - [x] **PG-003:** Define the MVP as a virtual market circuit breaker with no real funds.
 - [x] **PG-004:** Review the local TxLINE activation, streaming, validation, network, and soccer-stat documentation.
 - [x] **PG-005:** Define the goal and finalisation state-machine flow in `PLAN.md`.
-- [ ] **PG-006 — Gate:** Obtain owner approval for `PLAN.md`.
-- [ ] **PG-007 — Gate:** Confirm devnet as the implementation network.
-- [ ] **PG-008 — Gate:** Obtain a matching official devnet IDL and generated TypeScript type; do not reuse the mainnet-addressed root IDL without verification.
-- [ ] **PG-009 — Gate:** Confirm the devnet API host, program ID, TxL mint, RPC URL, IDL address, and wallet network all match.
-- [ ] **PG-010 — Gate:** Verify the configured wallet public key and devnet SOL balance without printing private key material.
+- [x] **PG-006 — Gate:** Obtain owner approval for `PLAN.md`.
+- [x] **PG-007 — Gate:** Confirm devnet as the implementation network.
+- [x] **PG-008 — Gate:** Obtain a matching official devnet IDL and generated TypeScript type; do not reuse the mainnet-addressed root IDL without verification.
+- [x] **PG-009 — Gate:** Confirm the devnet API host, program ID, TxL mint, RPC URL, IDL address, and wallet network all match.
+- [x] **PG-010 — Gate:** Verify the configured wallet public key and devnet SOL balance without printing private key material.
 - [ ] **PG-011:** Select one recent or upcoming covered fixture for live and historical testing.
 - [ ] **PG-012:** Record the chosen network and public identifiers in the README architecture section.
 
