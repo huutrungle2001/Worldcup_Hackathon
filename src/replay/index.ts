@@ -234,7 +234,8 @@ export class ReplayEngine {
       const nextTs = nextRecord.Ts ?? nextRecord.ts ?? Date.now();
 
       const timeDiff = Math.max(0, nextTs - currentTs);
-      const delay = Math.max(50, Math.floor(timeDiff / this.speedMultiplier));
+      // Cap the maximum delay to 1500ms to keep the demo dynamic during large event gaps (e.g. halftime)
+      const delay = Math.min(1500, Math.max(50, Math.floor(timeDiff / this.speedMultiplier)));
 
       logger.debug(`Scheduling next replay step in ${delay}ms...`);
       this.timeoutId = setTimeout(() => this.executeNextStep(), delay);
