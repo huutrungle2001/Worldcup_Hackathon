@@ -15,7 +15,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 |---|---|---|
 | M0 — Architecture gate | Complete | Owner approves MVP and network decisions |
 | M1 — Foundation | Complete | Local build, lint, typecheck, and tests pass |
-| M2 — TxLINE connection | Not started | Snapshots and both SSE streams remain healthy |
+| M2 — TxLINE connection | Complete | Snapshots and both SSE streams remain healthy |
 | M3 — Autonomous agent | Not started | Goal event halts the market exactly once |
 | M4 — Verification | Not started | Real proof passes `validateStatV2` on devnet |
 | M5 — Product UI | Not started | Live/replay end-to-end flow is visible |
@@ -96,38 +96,38 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 - [x] **PG-210:** Sign the activation message with the same wallet that subscribed.
 - [x] **PG-211:** Base64-encode the detached signature and activate the API token.
 - [x] **PG-212:** Keep the activated API token server-side.
-- [ ] **PG-213:** Renew only the guest JWT on `401`, retaining the activated API token.
-- [ ] **PG-214:** Surface `403` as a non-retryable network/subscription configuration error.
+- [x] **PG-213:** Renew only the guest JWT on `401`, retaining the activated API token.
+- [x] **PG-214:** Surface `403` as a non-retryable network/subscription configuration error.
 
 ### HTTP and SSE Clients
 
-- [ ] **PG-215:** Implement the authenticated TxLINE HTTP client with timeouts.
-- [ ] **PG-216:** Implement capped exponential backoff with jitter for `429` and transient `5xx` responses.
-- [ ] **PG-217:** Fetch the fixtures snapshot and select the configured fixture.
-- [ ] **PG-218:** Fetch initial score and odds snapshots before opening live streams.
-- [ ] **PG-219:** Implement standards-compliant SSE parsing, including multi-line data, comments, event IDs, and retry hints.
-- [ ] **PG-220:** Connect to the scores stream with both authentication headers.
-- [ ] **PG-221:** Connect to the odds stream with both authentication headers.
-- [ ] **PG-222:** Add randomized exponential reconnection for dropped streams.
-- [ ] **PG-223:** Reset the reconnection attempt counter after a healthy interval.
-- [ ] **PG-224:** Track last message, heartbeat, reconnect count, and error for each stream independently.
-- [ ] **PG-225:** Add graceful stream cancellation during shutdown.
+- [x] **PG-215:** Implement the authenticated TxLINE HTTP client with timeouts.
+- [x] **PG-216:** Implement capped exponential backoff with jitter for `429` and transient `5xx` responses.
+- [x] **PG-217:** Fetch the fixtures snapshot and select the configured fixture.
+- [x] **PG-218:** Fetch initial score and odds snapshots before opening live streams.
+- [x] **PG-219:** Implement standards-compliant SSE parsing, including multi-line data, comments, event IDs, and retry hints.
+- [x] **PG-220:** Connect to the scores stream with both authentication headers.
+- [x] **PG-221:** Connect to the odds stream with both authentication headers.
+- [x] **PG-222:** Add randomized exponential reconnection for dropped streams.
+- [x] **PG-223:** Reset the reconnection attempt counter after a healthy interval.
+- [x] **PG-224:** Track last message, heartbeat, reconnect count, and error for each stream independently.
+- [x] **PG-225:** Add graceful stream cancellation during shutdown.
 
 ### Normalization
 
-- [ ] **PG-226:** Define normalized fixture, score-event, odds-update, and stream-health types.
-- [ ] **PG-227:** Map both uppercase and lowercase payload variants such as `Seq`/`seq` and `FixtureId`/`fixtureId`.
-- [ ] **PG-228:** Reject score records with a missing, non-integer, or zero sequence.
-- [ ] **PG-229:** Generate a stable deduplication key from fixture ID, sequence, and event/action type.
-- [ ] **PG-230:** Preserve original timestamps and distinguish source time from ingestion time.
+- [x] **PG-226:** Define normalized fixture, score-event, odds-update, and stream-health types.
+- [x] **PG-227:** Map both uppercase and lowercase payload variants such as `Seq`/`seq` and `FixtureId`/`fixtureId`.
+- [x] **PG-228:** Reject score records with a missing, non-integer, or zero sequence.
+- [x] **PG-229:** Generate a stable deduplication key from fixture ID, sequence, and event/action type.
+- [x] **PG-230:** Preserve original timestamps and distinguish source time from ingestion time.
 
 ### M2 Acceptance
 
-- [ ] The application loads a real fixture and its initial snapshots.
-- [ ] Both SSE connections remain open and expose independent health.
-- [ ] A forced disconnect reconnects automatically.
-- [ ] A mocked `401` renews the JWT and reconnects using the same API token.
-- [ ] Duplicate score records are delivered to downstream code only once.
+- [x] The application loads a real fixture and its initial snapshots.
+- [x] Both SSE connections remain open and expose independent health.
+- [x] A forced disconnect reconnects automatically.
+- [x] A mocked `401` renews the JWT and reconnects using the same API token.
+- [x] Duplicate score records are delivered to downstream code only once.
 
 ## M3 — Deterministic Agent and Virtual Market
 
