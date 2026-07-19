@@ -1,0 +1,10 @@
+node_modules
+.next
+dashboard
+.git
+.tmp
+docs/proofguard_demo.mp4
+docs/voiceover.mp3
+**/node_modules
+**/out
+**/.next
