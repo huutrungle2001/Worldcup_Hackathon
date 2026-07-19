@@ -580,7 +580,7 @@ function testRiskAgentRacePaths() {
 async function testTask002FullTenRequirementsAndRegressions() {
   logger.info("Running Task 002 full requirements and closure regressions...");
 
-  // 1. One expected stat creates one single equality predicate with expected value
+  // 1. Strategy predicate building
   const strat1 = buildV2Strategy([{ key: 1, value: 3 }]);
   if (
     strat1.discretePredicates.length !== 1 ||
@@ -590,7 +590,6 @@ async function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Single stat strategy predicate construction failed");
   }
 
-  // 2. Two final stats create two single equality predicates at indexes 0 and 1
   const strat2 = buildV2Strategy([
     { key: 1, value: 2 },
     { key: 2, value: 1 },
@@ -605,75 +604,85 @@ async function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Two-stat strategy predicate construction failed");
   }
 
-  // 3. Identity matching: Wrong proof fixture ID
-  const expStats: ExpectedStat[] = [{ key: 1, value: 1 }];
+  // 2. Structurally independent identity checks using 2 expected stats:
+  const twoExpectedStats: ExpectedStat[] = [
+    { key: 1, value: 2 },
+    { key: 2, value: 1 },
+  ];
+
+  const dummyNodes = [{ hash: "0x1234567890123456789012345678901234567890123456789012345678901234", isRightSibling: true }];
+
+  // Wrong fixture ID
   const wrongFixtureResp = {
     summary: { fixtureId: 999, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }],
-    statProofs: [[]],
+    statsToProve: [{ key: 1, value: 2 }, { key: 2, value: 1 }],
+    statProofs: [dummyNodes, dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, wrongFixtureResp).valid) {
+  if (validateProofIdentity(123, 10, twoExpectedStats, wrongFixtureResp).valid) {
     throw new Error("Failed to reject wrong fixture ID in proof response");
   }
 
-  // Missing stat key in response
+  // Missing stat key in response (count mismatch: expected 2, got 1)
   const missingKeyResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [],
-    statProofs: [],
+    statsToProve: [{ key: 1, value: 2 }],
+    statProofs: [dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, missingKeyResp).valid) {
+  if (validateProofIdentity(123, 10, twoExpectedStats, missingKeyResp).valid) {
     throw new Error("Failed to reject missing stat key in proof response");
   }
 
-  // Extra stat key in response
+  // Extra stat key in response (count mismatch: expected 2, got 3)
   const extraKeyResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }, { key: 2, value: 0 }],
-    statProofs: [[], []],
+    statsToProve: [{ key: 1, value: 2 }, { key: 2, value: 1 }, { key: 2, value: 99 }],
+    statProofs: [dummyNodes, dummyNodes, dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, extraKeyResp).valid) {
+  if (validateProofIdentity(123, 10, twoExpectedStats, extraKeyResp).valid) {
     throw new Error("Failed to reject extra stat key in proof response");
   }
 
-  // Reordered stat key in response
+  // Reordered stat keys (count = 2, but key at index 0 is key 2 instead of key 1)
   const reorderedKeyResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 2, value: 1 }],
-    statProofs: [[]],
+    statsToProve: [{ key: 2, value: 1 }, { key: 1, value: 2 }],
+    statProofs: [dummyNodes, dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, reorderedKeyResp).valid) {
-    throw new Error("Failed to reject reordered/wrong stat key in proof response");
+  const reorderedCheck = validateProofIdentity(123, 10, twoExpectedStats, reorderedKeyResp);
+  if (reorderedCheck.valid || !reorderedCheck.reason?.includes("key mismatch at index 0")) {
+    throw new Error(`Failed to reject reordered stat keys: ${reorderedCheck.reason}`);
   }
 
-  // Duplicate stat key in response
+  // Duplicate stat keys (count = 2, but key at index 1 is key 1 instead of key 2)
   const duplicateKeyResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }, { key: 1, value: 1 }],
-    statProofs: [[], []],
+    statsToProve: [{ key: 1, value: 2 }, { key: 1, value: 2 }],
+    statProofs: [dummyNodes, dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, duplicateKeyResp).valid) {
-    throw new Error("Failed to reject duplicate stat key in proof response");
+  const duplicateCheck = validateProofIdentity(123, 10, twoExpectedStats, duplicateKeyResp);
+  if (duplicateCheck.valid || !duplicateCheck.reason?.includes("key mismatch at index 1")) {
+    throw new Error(`Failed to reject duplicate stat keys: ${duplicateCheck.reason}`);
   }
 
-  // Wrong stat value in response
+  // Wrong stat value in response (value mismatch for key 2: expected 1, got 5)
   const wrongValResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 5 }],
-    statProofs: [[]],
+    statsToProve: [{ key: 1, value: 2 }, { key: 2, value: 5 }],
+    statProofs: [dummyNodes, dummyNodes],
   };
-  if (validateProofIdentity(123, 10, expStats, wrongValResp).valid) {
-    throw new Error("Failed to reject wrong stat value in proof response");
+  const wrongValCheck = validateProofIdentity(123, 10, twoExpectedStats, wrongValResp);
+  if (wrongValCheck.valid || !wrongValCheck.reason?.includes("value mismatch for key 2")) {
+    throw new Error(`Failed to reject wrong stat value: ${wrongValCheck.reason}`);
   }
 
   // Missing stat proof array
   const missingProofResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [{ key: 1, value: 1 }],
-    statProofs: [],
+    statsToProve: [{ key: 1, value: 2 }, { key: 2, value: 1 }],
+    statProofs: [[], []], // Empty nodes
   };
-  if (validateProofIdentity(123, 10, expStats, missingProofResp).valid) {
-    throw new Error("Failed to reject missing stat proof in response");
+  if (validateProofIdentity(123, 10, twoExpectedStats, missingProofResp).valid) {
+    throw new Error("Failed to reject empty stat proof nodes in response");
   }
 
   // Prechecks: Unsupported key 3001, negative key -1, non-integer key 1.5, NaN value, negative value
@@ -821,34 +830,49 @@ async function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Closure Probe 3 failed: receipt store allowed coercible non-numeric stat scalar types!");
   }
 
+  // Absent period default vs provided non-finite period rejection
+  receiptStore.clear();
+  receiptStore.addReceipt({
+    id: "rcpt_period_absent",
+    fixtureId: 100,
+    seq: 1,
+    expectedStats: [{ key: 1, value: 1 }],
+    provedStats: [{ key: 1, value: 1 }], // Absent period
+    status: "SIMULATED",
+    mode: "SIMULATION",
+  });
+  const absentPeriodRcpt = receiptStore.getReceipts()[0];
+  if (!absentPeriodRcpt || absentPeriodRcpt.provedStats[0].period !== 0) {
+    throw new Error("Closure Probe 3 failed: absent period was not defaulted to 0!");
+  }
+
   receiptStore.clear();
   receiptStore.addReceipt({
     id: "rcpt_period_infinity",
     fixtureId: 100,
     seq: 1,
     expectedStats: [{ key: 1, value: 1 }],
-    provedStats: [{ key: 1, value: 1, period: Infinity as any }],
+    provedStats: [{ key: 1, value: 1, period: Infinity as any }], // Provided non-finite period
     status: "SIMULATED",
     mode: "SIMULATION",
   });
-  const infinitePeriodRcpt = receiptStore.getReceipts()[0];
-  if (!infinitePeriodRcpt || !Number.isFinite(infinitePeriodRcpt.provedStats[0].period)) {
-    throw new Error("Closure Probe 3 failed: receipt store allowed non-finite period!");
+  if (receiptStore.getReceipts().length !== 0) {
+    throw new Error("Closure Probe 3 failed: receipt store allowed provided non-finite period!");
   }
 
-  // Closure Probe 4: Runtime validateProofOnChain identity rejection probe with statsToProve: [null]
+  // Requirement 4: Runtime validateProofOnChain malformed object-scalar probe (value: false, period: Infinity)
   receiptStore.clear();
   const origGetScoreProof = txLineClient.getScoreProof;
   txLineClient.getScoreProof = async () => ({
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000, maxTimestamp: 1000, updateCount: 1 } },
-    statsToProve: [null], // Malformed array containing null
+    statsToProve: [{ key: 1, value: false as any, period: Infinity as any }], // Malformed object scalar
     statProofs: [[]],
   });
 
   try {
     const res = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: 1 }], false);
     if (res.success) {
-      throw new Error("Closure Probe 4 failed: expected validateProofOnChain to fail on null statsToProve");
+      throw new Error("Closure Probe 4 failed: expected validateProofOnChain to fail on malformed object scalar");
     }
     const receipts = receiptStore.getReceipts();
     if (receipts.length !== 1) {
@@ -860,11 +884,14 @@ async function testTask002FullTenRequirementsAndRegressions() {
     if (receipts[0].reason !== "Proof response identity check failed") {
       throw new Error(`Closure Probe 4 failed: expected "Proof response identity check failed", got "${receipts[0].reason}"`);
     }
+    if (receipts[0].provedStats.length !== 0) {
+      throw new Error(`Closure Probe 4 failed: malformed returned stats were not omitted! Got provedStats: ${JSON.stringify(receipts[0].provedStats)}`);
+    }
   } finally {
     txLineClient.getScoreProof = origGetScoreProof;
   }
 
-  // Closure Probe 5: Runtime validateProofOnChain precheck failure probe with malformed expected stats (value: NaN)
+  // Requirement 3: Runtime validateProofOnChain precheck failure probe (value: NaN) -> Expected stats validation failed
   receiptStore.clear();
   const resPrecheck = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: NaN }], false);
   if (resPrecheck.success) {
@@ -877,11 +904,14 @@ async function testTask002FullTenRequirementsAndRegressions() {
   if (precheckReceipts[0].status !== "REJECTED" || precheckReceipts[0].mode !== "PRECHECK") {
     throw new Error(`Closure Probe 5 failed: expected REJECTED + PRECHECK precheck receipt, got ${precheckReceipts[0].status} + ${precheckReceipts[0].mode}`);
   }
+  if (precheckReceipts[0].reason !== "Expected stats validation failed") {
+    throw new Error(`Closure Probe 5 failed: expected "Expected stats validation failed", got "${precheckReceipts[0].reason}"`);
+  }
 
   logger.info("✓ Task 002 full requirements and closure regressions passed.");
 }
 
-async function runAll() {
+function runAll() {
   logger.info("=== Starting Unit & Race Tests ===");
   testFixtureNormalization();
   testScoreNormalization();
@@ -889,8 +919,12 @@ async function runAll() {
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();
-  await testTask002FullTenRequirementsAndRegressions();
-  logger.info("=== All Unit & Race Tests Passed Successfully ===");
+  testTask002FullTenRequirementsAndRegressions().then(() => {
+    logger.info("=== All Unit & Race Tests Passed Successfully ===");
+  }).catch((err) => {
+    logger.error("Test failure:", err);
+    process.exit(1);
+  });
 }
 
 runAll();

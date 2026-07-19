@@ -4,32 +4,35 @@
 
 - **Task Name:** Task 002 — Bind TxLINE Proofs and Expose Verification Receipts
 - **Implementer:** Agy
-- **Review Decision:** `REQUEST_CHANGES` (Final closure candidate `7a84886` follow-up complete & verified)
-- **Status:** **COMPLETE** (Ready for Codex closure approval)
+- **Review Decision:** `REQUEST_CHANGES` (Mechanical closure re-review `356a180` follow-up complete & verified)
+- **Status:** **COMPLETE** (Ready for Codex final closure approval)
 
 ---
 
 ## Files Changed
 
 1. [`src/solana/validation.ts`](../../../src/solana/validation.ts):
-   - **Mechanical Requirement 1**: Updated `validateProofIdentity` rejection path to filter and omit malformed/non-numeric returned stat elements (`statsToProve: [null]`) instead of fabricating zero `{ key: 0, value: 0, period: 0 }` stats. Updated `ReceiptStore.addReceipt` to require finite numeric `period` values (`typeof s.period === "number" && Number.isFinite(s.period) ? s.period : 0`).
-   - **Mechanical Requirement 2**: Updated `SolanaValidator.validateProofOnChain` precheck failure path to sanitize `fixtureId`, `seq`, and `expectedStats` before passing to `receiptStore.addReceipt`, guaranteeing EXACTLY ONE sanitized `REJECTED + PRECHECK` receipt is stored even when raw expected stat inputs contain `value: NaN` or invalid fixture IDs.
+   - **Requirement 1**: Updated `validateProofOnChain` identity check rejection handler to filter returned stat elements by full scalar validity (`typeof k === "number" && Number.isInteger(k)`, `typeof v === "number" && Number.isFinite(v)`, `p === undefined || (typeof p === "number" && Number.isFinite(p))`), omitting malformed elements (`provedStats: []`) without synthesizing zero values (`{ key: 0, value: 0 }`).
+   - **Requirement 2**: Updated `ReceiptStore.addReceipt` to reject receipts with provided invalid non-finite/non-numeric `period` values (`s.period !== undefined && (typeof s.period !== "number" || !Number.isFinite(s.period))`), while preserving default `period: 0` for absent `period`.
+   - **Requirement 3**: Updated `sanitizeReasonString` to classify precheck failures (such as `Invalid non-finite or negative stat value`) as `"Expected stats validation failed"` and parameter failures as `"Proof request parameter validation failed"`.
 2. [`scripts/test_all.ts`](../../../scripts/test_all.ts):
-   - **Mechanical Requirement 3**: Mechanically restored EVERY line, assertion, and comment text of the approved Task 001 test baseline (`3fe2546` / `9b2c5be`) verbatim. Appended complete Task 002 tests after the baseline.
-   - **Mechanical Requirement 4**: Added direct runtime `solanaValidator.validateProofOnChain` probes with mocked `txLineClient.getScoreProof` (testing `statsToProve: [null]` and `expectedStats: [{ key: 1, value: NaN }]`) and asserted exact receipt count (`length === 1`), status (`REJECTED`), mode (`PRECHECK`), and controlled reason strings.
+   - **Requirement 4**: Made reordered and duplicate key test cases structurally independent using 2 expected stats (`[{ key: 1, value: 2 }, { key: 2, value: 1 }]`) and non-empty `statProofs` node arrays. Added runtime `validateProofOnChain` probes asserting `provedStats: []` (zero synthesized stats) on malformed object scalars (`value: false`, `period: Infinity`), `reason: "Expected stats validation failed"` on precheck `NaN` value, and strict store `period` boundaries (absent period defaulted to 0, provided `Infinity` period rejected).
+   - **Requirement 5**: Restored 100% of the approved Task 001 test baseline verbatim without baseline deletions, preserving `function runAll()` exactly.
 
 ---
 
-## Solutions to Mechanical Closure Requirements (`7a84886`)
+## Solutions to the 5 Exact Final Closure Requirements
 
-1. **Mechanical Requirement 1 (Omit Malformed Stats & Finite Period)**:
-   - Malformed stat elements in returned proof payload (`[null]`) are filtered out rather than converted to zero values. `ReceiptStore.addReceipt` enforces finite numeric `period` values with default `0` when non-finite or missing.
-2. **Mechanical Requirement 2 (Guaranteed Precheck Receipt)**:
-   - Precheck failure handler sanitizes `fixtureId`, `seq`, and `expectedStats` before insertion into `ReceiptStore`, ensuring malformed inputs (`value: NaN`) store exactly one `REJECTED + PRECHECK` receipt.
-3. **Mechanical Requirement 3 (Baseline Test & Comment Restoration)**:
-   - Restored 100% of the approved Task 001 test suite and docstrings verbatim. Appended Task 002 acceptance and regression tests.
-4. **Mechanical Requirement 4 (Runtime `validateProofOnChain` Receipt Probes)**:
-   - `scripts/test_all.ts` invokes `solanaValidator.validateProofOnChain` directly under mocked TxLINE responses and precheck inputs, asserting `receipts.length === 1`, status `REJECTED`, mode `PRECHECK`, and exact reason text.
+1. **Requirement 1 (Full Scalar Validity Stat Filtering)**:
+   - Malformed returned stat objects (`value: false`, `key: null`, `period: Infinity`) are filtered out rather than converted to zero values. `safeProvedStats` contains zero synthesized stats when object scalars are malformed.
+2. **Requirement 2 (Strict Period Boundary)**:
+   - `ReceiptStore.addReceipt` accepts absent `period` (`period: undefined` -> defaulted to `0`), but strictly rejects provided non-finite/non-numeric `period` values (`period: Infinity` -> rejected).
+3. **Requirement 3 (Precheck Failure Classification)**:
+   - `sanitizeReasonString` maps expected-stat precheck errors to `"Expected stats validation failed"` and param errors to `"Proof request parameter validation failed"`.
+4. **Requirement 4 (Independent 2-Stat Tests & Runtime Probes)**:
+   - Reordered/duplicate cases use 2 expected stats and valid `statProofs` dummy nodes, asserting exact error reasons (`key mismatch at index 0` / `key mismatch at index 1`). Runtime `validateProofOnChain` probes assert `provedStats: []` and exact precheck error reason.
+5. **Requirement 5 (Truthful Log & Verbatim Baseline)**:
+   - Execution log updated truthfully. Baseline diff clean with 0 deletions. All 7 verification checks executed and passed with exit code `0`.
 
 ---
 

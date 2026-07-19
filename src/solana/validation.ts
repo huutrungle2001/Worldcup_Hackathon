@@ -91,11 +91,18 @@ export function sanitizeReasonString(rawReason?: string): string | undefined {
     return knownReasons[rawReason];
   }
 
+  if (
+    rawReason.includes("Invalid non-finite or negative stat value") ||
+    rawReason.includes("Unsupported or non-integer stat key") ||
+    rawReason.includes("Duplicate stat key") ||
+    rawReason.includes("Expected stats array") ||
+    rawReason.includes("Unsupported") ||
+    rawReason.includes("Expected stats")
+  ) {
+    return "Expected stats validation failed";
+  }
   if (rawReason.includes("Invalid fixtureId") || rawReason.includes("Invalid sequence")) {
     return "Proof request parameter validation failed";
-  }
-  if (rawReason.includes("Unsupported") || rawReason.includes("Expected stats")) {
-    return "Expected stats validation failed";
   }
   if (rawReason.includes("TxLINE API") || rawReason.includes("fetch proof")) {
     return "TxLINE proof request failed";
@@ -104,6 +111,8 @@ export function sanitizeReasonString(rawReason?: string): string | undefined {
     rawReason.includes("mismatch") ||
     rawReason.includes("identity check") ||
     rawReason.includes("stat") ||
+    rawReason.includes("Returned stat") ||
+    rawReason.includes("must be a") ||
     rawReason.includes("summary") ||
     rawReason.includes("Response fixture ID")
   ) {
@@ -153,7 +162,7 @@ export class ReceiptStore {
         ? rawReceipt.proofTimestamp
         : 0;
 
-    // Closure Finding 2: Strict scalar type checking for expected and proved stats (no coercion)
+    // Strict scalar type checking for expected stats (no coercion)
     if (!Array.isArray(rawReceipt.expectedStats)) return;
     const expectedStats: ExpectedStat[] = [];
     for (const s of rawReceipt.expectedStats) {
@@ -184,10 +193,14 @@ export class ReceiptStore {
         ) {
           return; // Reject malformed proved stat scalar types
         }
+        // Requirement 2: Reject provided non-finite/non-numeric period, while preserving documented default only for absent period
+        if (s.period !== undefined && (typeof s.period !== "number" || !Number.isFinite(s.period))) {
+          return; // Reject provided invalid non-finite period
+        }
         provedStats.push({
           key: s.key,
           value: s.value,
-          period: typeof s.period === "number" && Number.isFinite(s.period) ? s.period : 0,
+          period: s.period !== undefined ? s.period : 0,
         });
       }
     }
@@ -585,7 +598,7 @@ export class SolanaValidator {
       return { success: false, provedStats: [] };
     }
 
-    // Closure Finding 3: Safe identity check wrapper ensuring exactly one sanitized receipt on error
+    // Safe identity check evaluation ensuring exactly one sanitized receipt on error
     try {
       const identityCheck = validateProofIdentity(
         fixtureId,
@@ -597,23 +610,35 @@ export class SolanaValidator {
       if (!identityCheck.valid) {
         logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
 
+        // Requirement 1: Filter malformed returned stat objects by full scalar validity before mapping; never substitute zero for invalid data
         let safeProvedStats: ProvedStat[] = [];
         if (Array.isArray(validationData?.statsToProve)) {
           safeProvedStats = validationData.statsToProve
-            .filter((stat: any) => stat && typeof stat === "object")
+            .filter((stat: any) => {
+              if (!stat || typeof stat !== "object") return false;
+              const k = stat.key ?? stat.Key;
+              const v = stat.value ?? stat.Value;
+              const p = stat.period ?? stat.Period;
+              const isKeyValid = typeof k === "number" && Number.isInteger(k);
+              const isValValid = typeof v === "number" && Number.isFinite(v);
+              const isPeriodValid = p === undefined || (typeof p === "number" && Number.isFinite(p));
+              return isKeyValid && isValValid && isPeriodValid;
+            })
             .map((stat: any) => {
               const k = stat.key ?? stat.Key;
               const v = stat.value ?? stat.Value;
               const p = stat.period ?? stat.Period;
               return {
-                key: typeof k === "number" && Number.isInteger(k) ? k : 0,
-                value: typeof v === "number" && Number.isFinite(v) ? v : 0,
+                key: k,
+                value: v,
                 period: typeof p === "number" && Number.isFinite(p) ? p : 0,
               };
             });
         }
 
-        const minTsRaw = validationData?.summary?.updateStats?.minTimestamp ?? validationData?.Summary?.UpdateStats?.MinTimestamp;
+        const minTsRaw =
+          validationData?.summary?.updateStats?.minTimestamp ??
+          validationData?.Summary?.UpdateStats?.MinTimestamp;
         const minTs = typeof minTsRaw === "number" && Number.isFinite(minTsRaw) ? minTsRaw : 0;
 
         receiptStore.addReceipt({

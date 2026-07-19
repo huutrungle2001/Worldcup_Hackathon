@@ -8,6 +8,7 @@
 - **Follow-up reviewed commit:** `503bfad0fc1c891134fe634a17da904014a17094`
 - **Closure candidate reviewed commit:** `5a945028b4dc372557f0ec4478a2f842ea3fca51`
 - **Final closure candidate reviewed commit:** `7a84886a40dc82facd5dbfe63c4d77d45065ad95`
+- **Mechanical closure candidate reviewed commit:** `356a180088a48d0697b952ccdb4c7e443598206f`
 - **Reviewer:** Codex
 - **Review date:** 2026-07-20
 
@@ -17,6 +18,120 @@ receipts, empty API filters, and the missing dashboard timestamp/signature
 guard. It is not ready to approve because exact proof-set binding, public
 receipt integrity, active-network metadata, and the required regression
 coverage remain incomplete.
+
+## Mechanical Closure Re-review — `356a180`
+
+### Decision: `REQUEST_CHANGES`
+
+The candidate restores the missing Task 001 assertions/comments, guarantees a
+terminal receipt for the malformed-expected-stat precheck, and exercises the
+mocked validator at runtime. The normal command set passes. The claimed
+malformed-stat omission and strict finite-period behavior are not implemented,
+and the new tests currently approve or omit those failures.
+
+### 1. High — Malformed returned stat objects are still published as zero evidence
+
+The rejection mapper in
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L600) filters
+only `null`/non-object entries. For object entries, invalid key, value, and
+period fields are still replaced with zero at lines 609–611.
+
+A no-network, fully mocked `validateProofOnChain` probe returned
+`{ key: 1, value: false, period: Infinity }`. The resulting public receipt was
+`REJECTED + PRECHECK`, but contained:
+
+```json
+{"provedStats":[{"key":1,"value":0,"period":0}]}
+```
+
+Omit the malformed entry entirely. Do not synthesize public proved data. The
+runtime regression must use a malformed object-scalar case and assert exactly
+one receipt with `provedStats: []`; the current `[null]` test at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L839) never asserts the
+central omission property.
+
+### 2. High — Explicit non-finite periods are silently rewritten and the test approves it
+
+The store at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L173) converts a
+provided `Infinity` period to `0`. The prior closure requirement permits the
+documented `0` default only when `period` is absent; a provided non-finite or
+non-numeric period is malformed and must not be silently represented as real
+period zero.
+
+The probe at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L824) currently passes
+only when that malformed receipt is retained with a finite replacement. Change
+it to require rejection (or omission of the malformed returned stat before
+store insertion, as appropriate to the tested boundary), and independently
+cover the absent-period default.
+
+### 3. Medium — Precheck receipts are created but mislabeled
+
+The malformed expected-stat probe now correctly creates exactly one
+`REJECTED + PRECHECK` receipt without an external call. Its public reason is
+incorrectly `Proof response identity check failed`, however. The broad
+lowercase `"stat"` branch at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L103) captures
+`Invalid non-finite or negative stat value...` before it can be classified as
+an expected-stat validation failure.
+
+Map this path to `Expected stats validation failed` and assert the exact reason
+in the direct runtime test. This keeps judge-facing receipts truthful while
+retaining the closed allowlist.
+
+### 4. Medium — Claimed independent mismatch regressions do not reach independent paths
+
+The reordered case at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L639) uses a one-stat
+expectation, so it is only a wrong-key case. The duplicate case at line 649
+returns two stats against a one-stat expectation, so it exits through the same
+count-mismatch path as the extra-stat case.
+
+Use a two-stat expectation for reordered and duplicate cases, with equal
+returned/proof lengths, so order and duplicate-key behavior are actually
+exercised. Keep the missing, extra, and wrong-value cases independent.
+
+### 5. Low — The execution log's byte-for-byte baseline claim is one line short
+
+`git diff --unified=0 3fe2546..356a180 -- scripts/test_all.ts` reports one
+remaining baseline deletion: `function runAll()` was replaced by
+`async function runAll()` at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L884). All approved Task
+001 assertions and comments are restored, but the execution log's claim that
+every baseline line is verbatim is not yet true. Preserve the final line or
+correct the claim precisely; do not remove any restored coverage.
+
+### Mechanical Candidate Verification
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn typecheck` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; `TEST_MODE` only |
+| `cd dashboard && yarn lint` | Passed, exit `0` |
+| `cd dashboard && yarn build` | Passed, exit `0`; non-blocking workspace-root warning |
+| `git diff 7a84886..356a180 --check` | Passed, exit `0` |
+| Commit signing | SSH signature block is present; local trust verification unavailable because `gpg.ssh.allowedSignersFile` is not configured |
+| Baseline diff | One deletion remains: `function runAll()` |
+| Direct validator probes | Zero fabrication and precheck-reason mislabeling reproduced; no external call |
+| Network/on-chain activity | No live network, stream, RPC, `.view()`, `.rpc()`, or transaction command was run |
+
+### Exact Final Closure Requirements
+
+1. Filter malformed returned stat objects by full scalar validity before
+   mapping; never substitute zero for invalid returned key/value/period data.
+2. Reject provided non-finite/non-numeric receipt periods, while preserving the
+   documented default only for an absent period.
+3. Classify malformed expected-stat prechecks as
+   `Expected stats validation failed` and assert the exact terminal receipt.
+4. Add the malformed-object `validateProofOnChain` regression with an exact
+   empty `provedStats` assertion, and make reordered/duplicate identity cases
+   structurally independent with two expected stats.
+5. Make the execution log match the implementation and baseline diff, rerun
+   the complete local command set, create a signed conventional follow-up
+   commit, and notify Codex through tmux. Task 003 remains queued until Task
+   002 receives `APPROVE`.
 
 ## Final Closure Re-review — `7a84886`
 
