@@ -2,6 +2,7 @@ import { NormalizedScoreEvent, NormalizedOddsUpdate } from "../domain/types";
 import { marketManager, VirtualMarket } from "./market";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
+import { solanaValidator } from "../solana/validation";
 
 export class RiskAgent {
   private haltTriggers: Map<number, NormalizedScoreEvent> = new Map();
@@ -145,10 +146,24 @@ export class RiskAgent {
   private async triggerOnChainValidation(event: NormalizedScoreEvent, statKeys: string[]) {
     logger.info(`Orchestrating on-chain verification for sequence ${event.seq} (stat keys: ${statKeys.join(",")})...`, { fixtureId: event.fixtureId, seq: event.seq });
     
-    // Fallback simulation for milestone verification. Will integrate the actual Solana validator module in Milestone 4.
-    setTimeout(() => {
-      this.registerVerificationSuccess(event.fixtureId, event.seq);
-    }, 4000);
+    if (process.env.TEST_MODE === "true") {
+      logger.info(`[TEST MODE] Auto-simulating on-chain validation success in 4 seconds.`);
+      setTimeout(() => {
+        this.registerVerificationSuccess(event.fixtureId, event.seq);
+      }, 4000);
+      return;
+    }
+
+    try {
+      const result = await solanaValidator.validateProofOnChain(event.fixtureId, event.seq, statKeys, true);
+      if (result) {
+        this.registerVerificationSuccess(event.fixtureId, event.seq);
+      } else {
+        logger.error(`On-chain proof validation returned false for fixture ${event.fixtureId}, seq ${event.seq}`);
+      }
+    } catch (err: any) {
+      logger.error(`Error executing on-chain proof validation for fixture ${event.fixtureId}, seq ${event.seq}:`, err);
+    }
   }
 }
 

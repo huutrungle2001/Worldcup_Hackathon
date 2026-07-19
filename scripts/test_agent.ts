@@ -5,6 +5,7 @@ import { logger } from "../src/utils/logger";
 import { healthMonitor } from "../src/utils/health";
 
 async function runTest() {
+  process.env.TEST_MODE = "true";
   logger.info("=== Starting Risk Agent State Machine Test ===");
 
   const fixtureId = 9999;

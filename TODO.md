@@ -17,7 +17,7 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 | M1 — Foundation | Complete | Local build, lint, typecheck, and tests pass |
 | M2 — TxLINE connection | Complete | Snapshots and both SSE streams remain healthy |
 | M3 — Autonomous agent | Complete | Goal event halts the market exactly once |
-| M4 — Verification | Not started | Real proof passes `validateStatV2` on devnet |
+| M4 — Verification | Complete | Real proof passes `validateStatV2` on devnet |
 | M5 — Product UI | Not started | Live/replay end-to-end flow is visible |
 | M6 — Hardening and release | Not started | Public build and submission materials are ready |
 
@@ -177,41 +177,41 @@ This checklist implements [PLAN.md](./PLAN.md). Do not begin source-code impleme
 
 ### Proof Request
 
-- [ ] **PG-401:** Request `/api/scores/stat-validation` using the observed fixture ID and sequence.
-- [ ] **PG-402:** Request `statKeys=1` or `2` for a goal and `statKeys=1,2` for finalisation.
-- [ ] **PG-403:** Retry proof-not-ready responses with capped backoff while keeping the market halted.
-- [ ] **PG-404:** Validate the response shape before constructing Anchor arguments.
-- [ ] **PG-405:** Decode every proof hash to exactly 32 bytes.
-- [ ] **PG-406:** Preserve `statKeys` order when mapping `statsToProve`, proofs, and strategy indexes.
+- [x] **PG-401:** Request `/api/scores/stat-validation` using the observed fixture ID and sequence.
+- [x] **PG-402:** Request `statKeys=1` or `2` for a goal and `statKeys=1,2` for finalisation.
+- [x] **PG-403:** Retry proof-not-ready responses with capped backoff while keeping the market halted.
+- [x] **PG-404:** Validate the response shape before constructing Anchor arguments.
+- [x] **PG-405:** Decode every proof hash to exactly 32 bytes.
+- [x] **PG-406:** Preserve `statKeys` order when mapping `statsToProve`, proofs, and strategy indexes.
 
 ### PDA and Payload
 
-- [ ] **PG-407:** Derive the proof timestamp from `summary.updateStats.minTimestamp`.
-- [ ] **PG-408:** Compute `epochDay = floor(proofTimestamp / 86400000)` and validate it fits u16.
-- [ ] **PG-409:** Derive `daily_scores_roots` dynamically using u16 little-endian encoding.
-- [ ] **PG-410:** Build the `StatValidationInput` payload without mutating proof values.
-- [ ] **PG-411:** Build a single-stat equality strategy for goal validation.
-- [ ] **PG-412:** Build a two-stat fully covered strategy for final-goal validation.
-- [ ] **PG-413:** Reject any V2 strategy that leaves a stat uncovered or reuses an index incorrectly.
+- [x] **PG-407:** Derive the proof timestamp from `summary.updateStats.minTimestamp`.
+- [x] **PG-408:** Compute `epochDay = floor(proofTimestamp / 86400000)` and validate it fits u16.
+- [x] **PG-409:** Derive `daily_scores_roots` dynamically using u16 little-endian encoding.
+- [x] **PG-410:** Build the `StatValidationInput` payload without mutating proof values.
+- [x] **PG-411:** Build a single-stat equality strategy for goal validation.
+- [x] **PG-412:** Build a two-stat fully covered strategy for final-goal validation.
+- [x] **PG-413:** Reject any V2 strategy that leaves a stat uncovered or reuses an index incorrectly.
 
 ### Execution and Receipt
 
-- [ ] **PG-414:** Add a compute-budget instruction appropriate for proof validation.
-- [ ] **PG-415:** Run `.view()` first and require a `true` validation result.
-- [ ] **PG-416:** Keep the market halted when simulation returns false or throws.
-- [ ] **PG-417:** Check wallet balance before submitting a validation receipt transaction.
-- [ ] **PG-418:** Submit with preflight enabled and confirmed commitment.
-- [ ] **PG-419:** Record the public transaction signature, program ID, PDA, fixture ID, sequence, stat keys, and validation time.
-- [ ] **PG-420:** Add Solana RPC `429` retry handling without blindly resubmitting an unknown transaction outcome.
-- [ ] **PG-421:** Expose a read-only simulation fallback when receipt submission is unavailable.
+- [x] **PG-414:** Add a compute-budget instruction appropriate for proof validation.
+- [x] **PG-415:** Run `.view()` first and require a `true` validation result.
+- [x] **PG-416:** Keep the market halted when simulation returns false or throws.
+- [x] **PG-417:** Check wallet balance before submitting a validation receipt transaction.
+- [x] **PG-418:** Submit with preflight enabled and confirmed commitment.
+- [x] **PG-419:** Record the public transaction signature, program ID, PDA, fixture ID, sequence, stat keys, and validation time.
+- [x] **PG-420:** Add Solana RPC `429` retry handling without blindly resubmitting an unknown transaction outcome.
+- [x] **PG-421:** Expose a read-only simulation fallback when receipt submission is unavailable.
 
 ### M4 Acceptance
 
-- [ ] One real historical or live score record validates successfully on devnet.
-- [ ] The derived PDA is based on the proof timestamp, not `Date.now()`.
-- [ ] An intentionally altered hash or sequence fails safely.
-- [ ] The application never reopens or settles after a false or failed validation.
-- [ ] At least one proof receipt is publicly inspectable through a Solana explorer or diagnostic view.
+- [x] One real historical or live score record validates successfully on devnet.
+- [x] The derived PDA is based on the proof timestamp, not `Date.now()`.
+- [x] An intentionally altered hash or sequence fails safely.
+- [x] The application never reopens or settles after a false or failed validation.
+- [x] At least one proof receipt is publicly inspectable through a Solana explorer or diagnostic view.
 
 ## M5 — Replay, Server API, and Dashboard
 
