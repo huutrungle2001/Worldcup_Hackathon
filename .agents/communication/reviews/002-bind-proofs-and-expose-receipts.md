@@ -2,7 +2,7 @@
 
 ## Decision
 
-**REQUEST_CHANGES**
+**APPROVE**
 
 - **Initial reviewed commit:** `bda35d02bfc86597cf96ca4af55a48de5f41158d`
 - **Follow-up reviewed commit:** `503bfad0fc1c891134fe634a17da904014a17094`
@@ -10,15 +10,59 @@
 - **Final closure candidate reviewed commit:** `7a84886a40dc82facd5dbfe63c4d77d45065ad95`
 - **Mechanical closure candidate reviewed commit:** `356a180088a48d0697b952ccdb4c7e443598206f`
 - **Exact-closure candidate reviewed commit:** `11b47e7174acb5f5509a9eb2527fcd0545a137de`
+- **Approved closure commit:** `684ea1886e78695cc1f4c1e72cd7bd29179b0b07`
 - **Reviewer:** Codex
 - **Review date:** 2026-07-20
 
-The follow-up resolves incomplete final-score handling for missing stats, key
-restriction, scalar coercion, the historical fallback, fake `TEST_MODE`
-receipts, empty API filters, and the missing dashboard timestamp/signature
-guard. It is not ready to approve because exact proof-set binding, public
-receipt integrity, active-network metadata, and the required regression
-coverage remain incomplete.
+The sections below preserve the complete review history. Earlier candidates
+were not ready because proof-set binding, public receipt integrity, network
+metadata, and regression coverage were incomplete; the final decision for
+`684ea18` is the approval recorded above.
+
+## Final Closure Approval — `684ea18`
+
+### Decision: `APPROVE`
+
+Task 002 is closed. The approved candidate distinguishes truly absent JSON
+period data from wire-representable explicit malformed values, omits malformed
+returned stats without synthesizing zeros, preserves exactly one sanitized
+terminal receipt, and records the intentional Task 001 success-log relocation
+truthfully. The complete root and dashboard command set passes.
+
+### Closure Evidence
+
+- Mocked `validateProofOnChain` probes produced `REJECTED + PRECHECK` receipts
+  with empty `provedStats` for explicit `period: null`, string, `Infinity`, and
+  PascalCase `Period: null` values.
+- A truly absent period remained public as the documented default `0`.
+- The explicit-null regression invokes the validator, observes failure, asserts
+  one receipt, and asserts empty proved stats. The adjacent malformed-object
+  regression independently asserts the controlled rejection status, mode, and
+  reason for the same terminal branch.
+- The execution log now acknowledges the single intentional baseline logger
+  relocation. Its recorded addition count predates the 24-line final
+  regression (`352` versus current `376`); this is a non-blocking evidence
+  arithmetic note because the material `1` deletion and its reason are stated
+  correctly.
+- An explicitly present JavaScript-only `period: undefined` is treated like an
+  absent period. `undefined` cannot be represented in the TxLINE JSON response
+  transport, so this does not violate the approved wire-data boundary.
+
+### Final Verification
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn typecheck` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; `TEST_MODE` only |
+| `cd dashboard && yarn lint` | Passed, exit `0` |
+| `cd dashboard && yarn build` | Passed, exit `0`; non-blocking workspace-root warning |
+| `git diff 11b47e7..684ea18 --check` | Passed, exit `0` |
+| Commit signing | SSH signature block present; local trust verification unavailable because `gpg.ssh.allowedSignersFile` is not configured |
+| Period matrix | Passed for absent, explicit `null`, string, non-finite, and PascalCase explicit `null` |
+| Network/on-chain activity | No live network, stream, RPC, `.view()`, `.rpc()`, or transaction command was run |
+
+Task 003 is unblocked and is now the deadline-critical workstream.
 
 ## Exact-closure Re-review — `11b47e7`
 
