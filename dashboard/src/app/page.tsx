@@ -1,4 +1,4 @@
-"use" + " client"; // Split to avoid linter directive match in backend if running
+"use client";
 
 import React, { useEffect, useState } from "react";
 
