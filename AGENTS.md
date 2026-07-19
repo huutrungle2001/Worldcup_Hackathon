@@ -64,3 +64,54 @@ AI agents working in this workspace must follow these rules:
 ### 3. Project Scaffolding Rules
 * **No Source Code Yet:** The repository should stay scaffolded without raw implementation code until the architecture is agreed upon. Keep template types in [types/](file:///Users/huutrungle2001/Documents/OnGoing/Worldcup_Hackathon/types) and [idl/](file:///Users/huutrungle2001/Documents/OnGoing/Worldcup_Hackathon/idl).
 * **Create Scratch Scripts:** Save testing/validation scratch code under the `/Users/huutrungle2001/.gemini/antigravity-cli/brain/<conversation-id>/scratch/` directory. Do not leave stray draft scripts in the repository root.
+
+## 6. Development Rules for Agents
+
+### 6.1 Core Development Rules
+* **Subagent Delegation**: Summon subagents whenever the task contains genuinely independent, bounded work that can be completed in parallel or benefits from a separate expert review. Give each subagent a concrete scope and success criterion, avoid delegating tightly coupled edits that would create merge conflicts, and have the primary agent verify every delegated result before integrating or reporting it.
+
+* **Temporary & Scratch Scripts**: All one-time test codes, verification scripts, scratch files, and temporary debug tools must be written inside the `.tmp/` directory. Writing scratch or test code in the root directory or other non-temp directories is strictly prohibited.
+
+* **Commit rule**: All commits must follow the format `<type>(optional-scope): <short message>`.
+  Examples:
+  ```
+  feat(auth): add Google login
+  fix(api): handle empty response
+  docs(readme): add setup instructions
+  refactor(parser): simplify join parsing logic
+  test(optimizer): add regression tests
+  chore(deps): update dependencies
+  ```
+* **Commit Signing & Verification**: The `master` branch requires all commits to be cryptographically signed (GPG, SSH, or S/MIME). Commits that are unsigned or signed with keys not associated with a verified collaborator account on GitHub will be rejected during push.
+  - Agents and collaborators must configure their Git environment to sign commits (e.g., setting `commit.gpgsign` to `true` and setting `user.signingkey` to a verified SSH/GPG key registered on GitHub) before pushing to the repository.
+
+### 6.2 Coding Guidelines
+These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+#### 6.2.1 Think Before Coding
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+* State assumptions explicitly. If uncertain, ask.
+* If multiple interpretations exist, present them - don't pick silently.
+* If a simpler approach exists, push back when warranted.
+* If something is unclear, stop and ask for clarification.
+
+#### 6.2.2 Simplicity First
+**Minimum code that solves the problem. Nothing speculative.**
+* No features beyond what was asked.
+* No abstractions for single-use code.
+* No "flexibility" or "configurability" that wasn't requested.
+* No error handling for impossible scenarios.
+* If code could be simplified, rewrite/reduce it. Ask: "Would a senior engineer say this is overcomplicated?"
+
+#### 6.2.3 Surgical Changes
+**Touch only what you must. Clean up only your own mess.**
+* Don't "improve" adjacent code, comments, or formatting.
+* Don't refactor things that aren't broken.
+* Match existing style, even if you'd do it differently.
+* Remove unused imports/variables/functions created by your changes, but do not delete pre-existing dead code unless asked.
+
+#### 6.2.4 Goal-Driven Execution
+**Define success criteria. Loop until verified.**
+* Transform tasks into verifiable goals (e.g., write/run tests to reproduce/verify).
+* For multi-step tasks, state a brief plan with verification steps.
+
