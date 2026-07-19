@@ -1,0 +1,11 @@
+Hi everyone, welcome to the demo of ProofGuard. 
+
+In sports betting, bookmakers face a major challenge called latency arbitrage or courtsiding. When a goal is scored in a match, there's a lag of a few seconds before the odds feeds update. Exploitative bots use this delay to place bets on outdated, high odds. ProofGuard solves this by acting as an autonomous, low-latency risk agent and circuit breaker powered by Solana and TxLINE data.
+
+Here on the dashboard, we have a clear overview of the ProofGuard journey. The system monitors the live feed. The moment a goal is detected, it halts the virtual market. It then verifies the score using cryptographic proofs validated on the Solana blockchain. Only when fresh odds arrive does the market reopen. At the top right, you can see all our system health checks are green, showing active connection to TxLINE streams and the Solana devnet RPC.
+
+Let's run a simulation using real historical score data from the World Cup match between Spain and Argentina (Fixture 18257739). We'll set the speed to 10x and trigger the historical demo. The progression bar instantly updates, showing the live events replaying from the TxLINE snapshot. In a second, you will see a new virtual market card appear for Spain vs Argentina in the OPEN state, accepting virtual trades at the starting odds.
+
+Now, keep your eyes on the market. As the simulation progresses, a goal is scored! Instantly, the state machine transitions to HALTED. The virtual market is locked. Simultaneously, the agent requests a cryptographic proof of the score from TxLINE, and sends a transaction to our Solana Anchor program. The smart contract validates the signature and persists the score. Here on the right, you can see the Solana Verification Receipt marked as Confirmed on Solana with its corresponding Explorer link.
+
+Once the proof is verified on-chain, the market moves to PROOF_PENDING—waiting for repriced odds. The moment the new post-goal odds arrive, the market transitions back to OPEN, allowing trading to resume at fair, updated prices. At the end of the match, the agent detects the game finalization, submits the final proof, and transitions the market status to SETTLED. ProofGuard successfully protects bookmaker liquidity autonomously, securely, and transparently on Solana. Thank you!
