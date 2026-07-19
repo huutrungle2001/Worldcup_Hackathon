@@ -7,6 +7,7 @@
 - **Initial reviewed commit:** `bda35d02bfc86597cf96ca4af55a48de5f41158d`
 - **Follow-up reviewed commit:** `503bfad0fc1c891134fe634a17da904014a17094`
 - **Closure candidate reviewed commit:** `5a945028b4dc372557f0ec4478a2f842ea3fca51`
+- **Final closure candidate reviewed commit:** `7a84886a40dc82facd5dbfe63c4d77d45065ad95`
 - **Reviewer:** Codex
 - **Review date:** 2026-07-20
 
@@ -16,6 +17,89 @@ receipts, empty API filters, and the missing dashboard timestamp/signature
 guard. It is not ready to approve because exact proof-set binding, public
 receipt integrity, active-network metadata, and the required regression
 coverage remain incomplete.
+
+## Final Closure Re-review — `7a84886`
+
+### Decision: `REQUEST_CHANGES`
+
+The missing-expectation guard, closed reason fallback, strict expected-stat
+key/value types, and real `[null]` identity-rejection runtime path now behave
+correctly. Three tightly bounded blockers remain.
+
+### 1. High — Rejected receipts can fabricate or corrupt public proved stats
+
+The identity-rejection mapper at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L580) converts
+malformed object fields to `{ key: 0, value: 0, period: 0 }` and stores them as
+if they were returned evidence. Invalid returned entries must be omitted, not
+rewritten as zero-valued proof data.
+
+The store also checks only `typeof s.period === "number"` at
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L181). A local
+receipt with `period: Infinity` was accepted and returned as `period: null`
+after JSON copying. Require finite numeric period data, with the documented
+default only when period is absent.
+
+### 2. High — Invalid prechecks can fail without the required rejection receipt
+
+Strict store validation now rejects the same malformed expected-stat array that
+caused the validator precheck to fail. A no-network probe called
+`validateProofOnChain` with `{ key: 1, value: NaN }`; it returned
+`success: false`, correctly made no external call, but stored zero receipts.
+
+Precheck failures must still create exactly one safe `REJECTED + PRECHECK`
+receipt. Store an empty or strictly filtered public expected-stat list rather
+than passing malformed input into the receipt store.
+
+### 3. High — Baseline restoration and closure tests are still incomplete
+
+`git diff 3fe2546..7a84886 -- scripts/test_all.ts` still contains `54`
+deletions from the approved Task 001 baseline. Missing material includes:
+
+- Exact pre-existing comments/docstring text
+- Message ID and timestamp assertions
+- Extra-time, untyped named-price, and unrelated-market-without-timestamp cases
+- The original detailed shuffled-price assertion and missing-price comment
+
+Restore [`scripts/test_all.ts`](../../../scripts/test_all.ts) mechanically from
+the approved `9b2c5be`/`3fe2546` baseline and append Task 002 tests; do not
+rewrite or replace earlier assertions and comments.
+
+The current test at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L713) constructs a
+`SolanaValidator` but never calls `validateProofOnChain`, so it cannot prove the
+exactly-one-receipt runtime contract. The case labeled
+missing/extra/reordered/duplicate at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L566) still tests only one
+wrong key. Add direct independent cases and assert receipt count/status/reason.
+
+### Final Candidate Verification
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn typecheck` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; `TEST_MODE` only |
+| `cd dashboard && yarn lint` | Passed, exit `0` |
+| `cd dashboard && yarn build` | Passed, exit `0`; non-blocking workspace-root warning |
+| `git diff 5a94502..7a84886 --check` | Passed, exit `0` |
+| Commit signing | SSH signature block is present; local trust verification unavailable |
+| Closure probes | Missing expectation, closed reasons, strict key/value types, and `[null]` rejection passed |
+| Additional probes | Invalid precheck receipt, synthetic zero stats, finite period, and baseline restoration failed |
+| Network/on-chain activity | No live network, stream, RPC, or transaction command was run |
+
+### Mechanical Closure Requirements
+
+1. Omit malformed returned stats rather than fabricating zero values; validate
+   finite period data.
+2. Guarantee one sanitized precheck receipt even when the raw expected-stat
+   input itself is malformed.
+3. Restore every line of the approved Task 001 test baseline, then append
+   complete Task 002 cases for each claimed variant.
+4. Make the malformed-response regression invoke mocked
+   `validateProofOnChain` and assert exactly one terminal receipt.
+5. Correct the execution log, rerun the full local command set, create a signed
+   conventional follow-up commit, and notify Codex through tmux.
 
 ## Closure Re-review — `5a94502`
 

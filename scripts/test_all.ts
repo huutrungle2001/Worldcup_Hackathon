@@ -17,12 +17,14 @@ import {
   receiptStore,
   ExpectedStat,
   sanitizeReasonString,
-  SolanaValidator,
+  solanaValidator,
 } from "../src/solana/validation";
 import { appConfig } from "../src/config";
+import { txLineClient } from "../src/txline/api";
 
 /**
  * Robust assertion helper for functions expected to throw an error.
+ * Cannot swallow its own assertion errors because verification occurs outside the try/catch block.
  */
 function expectThrow(fn: () => void, expectedKeyword: string) {
   let threw = false;
@@ -52,6 +54,7 @@ function expectThrow(fn: () => void, expectedKeyword: string) {
 function testFixtureNormalization() {
   logger.info("Running fixture normalization tests...");
 
+  // 1. Real-shape fixture with Participant1, Participant2, Competition, StartTime
   const rawFixture = {
     FixtureId: 123,
     Participant1: "Team A",
@@ -85,6 +88,7 @@ function testFixtureNormalization() {
     throw new Error(`StartTime ISO mismatch: got ${norm.startTime}`);
   }
 
+  // Missing or invalid StartTime throws error
   expectThrow(
     () =>
       normalizeFixture({ FixtureId: 123, Participant1: "A", Participant2: "B" }),
@@ -97,6 +101,7 @@ function testFixtureNormalization() {
 function testScoreNormalization() {
   logger.info("Running score normalization tests...");
 
+  // 2. Real-shape goal record with Stats["1"] = 1, Stats["2"] = 0, Participant = 1
   const rawScore = {
     FixtureId: 123,
     Seq: 10,
@@ -124,6 +129,7 @@ function testScoreNormalization() {
   if (norm.statusId !== 2) throw new Error("StatusId mismatch");
   if (norm.eventKey !== "123:10:goal") throw new Error("EventKey mismatch");
 
+  // Action canonicalization (trimmed & lowercased) and stable event key
   const rawPaddedAction = {
     FixtureId: 123,
     Seq: 10,
@@ -143,6 +149,7 @@ function testScoreNormalization() {
     );
   }
 
+  // Preserved string GameState
   const normStrState = normalizeScoreEvent({
     FixtureId: 123,
     Seq: 1,
@@ -155,6 +162,7 @@ function testScoreNormalization() {
     );
   }
 
+  // 3. Lowercase / synthetic score aliases remain supported
   const rawSynthetic = {
     fixtureId: 101,
     seq: 5,
@@ -170,6 +178,7 @@ function testScoreNormalization() {
     );
   }
 
+  // 4. Missing as well as zero score sequence rejected
   expectThrow(
     () => normalizeScoreEvent({ FixtureId: 123, Ts: 10000 }),
     "sequence"
@@ -179,6 +188,7 @@ function testScoreNormalization() {
     "sequence"
   );
 
+  // 5. Missing score timestamp rejected
   expectThrow(
     () => normalizeScoreEvent({ FixtureId: 123, Seq: 5 }),
     "timestamp"
@@ -190,6 +200,7 @@ function testScoreNormalization() {
 function testOddsNormalization() {
   logger.info("Running odds normalization & routing tests...");
 
+  // 6. Actual-shape full-match 1X2 odds message
   const rawOdds = {
     FixtureId: 123,
     MessageId: "synthetic-msg-123",
@@ -210,7 +221,11 @@ function testOddsNormalization() {
       `Odds price mismatch: got ${norm.oddsOne}/${norm.oddsDraw}/${norm.oddsTwo}`
     );
   }
+  if (norm.messageId !== "synthetic-msg-123")
+    throw new Error("MessageId mismatch");
+  if (norm.ts !== 1790348501000) throw new Error("Odds TS mismatch");
 
+  // 7. Shuffled PriceNames still map correctly
   const rawShuffled = {
     FixtureId: 123,
     Ts: 1790348501000,
@@ -225,9 +240,12 @@ function testOddsNormalization() {
     normShuffled.oddsDraw !== 3100 ||
     normShuffled.oddsTwo !== 4100
   ) {
-    throw new Error("Shuffled price routing failed");
+    throw new Error(
+      `Shuffled odds mismatch: got ${normShuffled.oddsOne}/${normShuffled.oddsDraw}/${normShuffled.oddsTwo}`
+    );
   }
 
+  // 8. Handicap or over/under message is ignored (returns null)
   const rawOverUnder = {
     FixtureId: 123,
     Ts: 1790348501000,
@@ -239,6 +257,40 @@ function testOddsNormalization() {
     throw new Error("Handicap/Over-Under market should return null");
   }
 
+  // 9. Extra-time or other non-full-match 1X2 message is ignored (returns null)
+  const rawExtraTime = {
+    FixtureId: 123,
+    Ts: 1790348501000,
+    SuperOddsType: "1X2_PARTICIPANT_RESULT",
+    MarketPeriod: "ET1",
+    PriceNames: ["part1", "draw", "part2"],
+    Prices: [2000, 3000, 4000],
+  };
+  if (normalizeOddsUpdate(rawExtraTime) !== null) {
+    throw new Error("Extra-time market should return null");
+  }
+
+  // Untyped named-price payload (missing SuperOddsType) must return null
+  const rawUntypedNamed = {
+    FixtureId: 123,
+    Ts: 1790348501000,
+    PriceNames: ["part1", "draw", "part2"],
+    Prices: [1000, 2000, 3000],
+  };
+  if (normalizeOddsUpdate(rawUntypedNamed) !== null) {
+    throw new Error("Untyped named-price payload must return null");
+  }
+
+  // Unrelated market without Ts returns null instead of throwing an exception
+  const rawUnrelatedNoTs = {
+    FixtureId: 123,
+    SuperOddsType: "HANDICAP",
+  };
+  if (normalizeOddsUpdate(rawUnrelatedNoTs) !== null) {
+    throw new Error("Unrelated market without timestamp should return null");
+  }
+
+  // 10. Missing, zero, negative, NaN, and infinite 1X2 prices are rejected
   expectThrow(
     () =>
       normalizeOddsUpdate({
@@ -246,7 +298,7 @@ function testOddsNormalization() {
         Ts: 1790348501000,
         SuperOddsType: "1X2_PARTICIPANT_RESULT",
         PriceNames: ["part1", "draw", "part2"],
-        Prices: [2000, 3000],
+        Prices: [2000, 3000], // Missing one required price value
       }),
     "prices"
   );
@@ -503,6 +555,7 @@ function testRiskAgentRacePaths() {
   }
 
   // 9. Finding 3: Settle the market using proved goals (total goals 2-1), verifying winner calculation
+  // Let's modify the raw stream scores to be tampered (e.g. 0-0) to prove it uses verified stats!
   m.scoreOne = 0;
   m.scoreTwo = 0;
 
@@ -524,7 +577,7 @@ function testRiskAgentRacePaths() {
   logger.info("✓ RiskAgent race path and verification binding tests passed.");
 }
 
-function testTask002FullTenRequirementsAndRegressions() {
+async function testTask002FullTenRequirementsAndRegressions() {
   logger.info("Running Task 002 full requirements and closure regressions...");
 
   // 1. One expected stat creates one single equality predicate with expected value
@@ -552,7 +605,7 @@ function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Two-stat strategy predicate construction failed");
   }
 
-  // 3. Wrong proof fixture ID is rejected
+  // 3. Identity matching: Wrong proof fixture ID
   const expStats: ExpectedStat[] = [{ key: 1, value: 1 }];
   const wrongFixtureResp = {
     summary: { fixtureId: 999, updateStats: { minTimestamp: 1000 } },
@@ -563,17 +616,47 @@ function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Failed to reject wrong fixture ID in proof response");
   }
 
-  // 4. Missing, extra, reordered, duplicate, or wrong returned stat keys are rejected
-  const wrongKeyResp = {
+  // Missing stat key in response
+  const missingKeyResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [],
+    statProofs: [],
+  };
+  if (validateProofIdentity(123, 10, expStats, missingKeyResp).valid) {
+    throw new Error("Failed to reject missing stat key in proof response");
+  }
+
+  // Extra stat key in response
+  const extraKeyResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 1 }, { key: 2, value: 0 }],
+    statProofs: [[], []],
+  };
+  if (validateProofIdentity(123, 10, expStats, extraKeyResp).valid) {
+    throw new Error("Failed to reject extra stat key in proof response");
+  }
+
+  // Reordered stat key in response
+  const reorderedKeyResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
     statsToProve: [{ key: 2, value: 1 }],
     statProofs: [[]],
   };
-  if (validateProofIdentity(123, 10, expStats, wrongKeyResp).valid) {
-    throw new Error("Failed to reject wrong stat key in proof response");
+  if (validateProofIdentity(123, 10, expStats, reorderedKeyResp).valid) {
+    throw new Error("Failed to reject reordered/wrong stat key in proof response");
   }
 
-  // 5. Returned stat value different from triggering value is rejected
+  // Duplicate stat key in response
+  const duplicateKeyResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 1 }, { key: 1, value: 1 }],
+    statProofs: [[], []],
+  };
+  if (validateProofIdentity(123, 10, expStats, duplicateKeyResp).valid) {
+    throw new Error("Failed to reject duplicate stat key in proof response");
+  }
+
+  // Wrong stat value in response
   const wrongValResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
     statsToProve: [{ key: 1, value: 5 }],
@@ -583,7 +666,7 @@ function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Failed to reject wrong stat value in proof response");
   }
 
-  // 6. Missing or empty corresponding stat proof is rejected
+  // Missing stat proof array
   const missingProofResp = {
     summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
     statsToProve: [{ key: 1, value: 1 }],
@@ -593,18 +676,32 @@ function testTask002FullTenRequirementsAndRegressions() {
     throw new Error("Failed to reject missing stat proof in response");
   }
 
-  // 7. Invalid expected values or keys fail before any external operation
-  if (validateExpectedStatsPrecheck([{ key: -1, value: 1 }]).valid) {
-    throw new Error("Should reject negative key in precheck");
-  }
+  // Prechecks: Unsupported key 3001, negative key -1, non-integer key 1.5, NaN value, negative value
   if (validateExpectedStatsPrecheck([{ key: 3001, value: 1 }]).valid) {
     throw new Error("Should reject key 3001 in precheck");
   }
+  if (validateExpectedStatsPrecheck([{ key: -1, value: 1 }]).valid) {
+    throw new Error("Should reject negative key in precheck");
+  }
+  if (validateExpectedStatsPrecheck([{ key: 1.5 as any, value: 1 }]).valid) {
+    throw new Error("Should reject non-integer key in precheck");
+  }
+  if (validateExpectedStatsPrecheck([{ key: 1, value: NaN }]).valid) {
+    throw new Error("Should reject NaN stat value in precheck");
+  }
+  if (validateExpectedStatsPrecheck([{ key: 1, value: -1 }]).valid) {
+    throw new Error("Should reject negative stat value in precheck");
+  }
+
+  // Request params invalid fixtureId / seq
   if (validateProofRequestParams(-1, 10, [{ key: 1, value: 1 }]).valid) {
     throw new Error("Should reject negative fixtureId in request params check");
   }
+  if (validateProofRequestParams(123, -5, [{ key: 1, value: 1 }]).valid) {
+    throw new Error("Should reject negative sequence in request params check");
+  }
 
-  // 8. Simulated and confirmed receipt shapes are labeled distinctly, simulated receipt has no explorer link
+  // 8. Simulated vs Confirmed receipt shapes labeled distinctly, simulated receipt has no explorer link
   receiptStore.clear();
   receiptStore.addReceipt({
     id: "rcpt_sim_1",
@@ -710,20 +807,7 @@ function testTask002FullTenRequirementsAndRegressions() {
     throw new Error(`Closure Probe 2 failed: expected "Proof validation failed", got "${sanitizedCredential}"`);
   }
 
-  // Closure Probe 3: Malformed rejected proof with statsToProve: [null]
-  receiptStore.clear();
-  const validator = new SolanaValidator();
-  const malformedResp = {
-    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
-    statsToProve: [null], // Malformed array containing null
-    statProofs: [[]],
-  };
-  const identityResult = validateProofIdentity(123, 10, [{ key: 1, value: 1 }], malformedResp);
-  if (identityResult.valid) {
-    throw new Error("Closure Probe 3 failed: expected identity check to fail for malformed statsToProve");
-  }
-
-  // Closure Probe 4: Strict stat scalar types in store boundary
+  // Closure Probe 3: Strict stat scalar types & finite period in store boundary
   receiptStore.clear();
   receiptStore.addReceipt({
     id: "rcpt_coercion_test",
@@ -734,13 +818,70 @@ function testTask002FullTenRequirementsAndRegressions() {
     mode: "SIMULATION",
   });
   if (receiptStore.getReceipts().length !== 0) {
-    throw new Error("Closure Probe 4 failed: receipt store allowed coercible non-numeric stat scalar types!");
+    throw new Error("Closure Probe 3 failed: receipt store allowed coercible non-numeric stat scalar types!");
+  }
+
+  receiptStore.clear();
+  receiptStore.addReceipt({
+    id: "rcpt_period_infinity",
+    fixtureId: 100,
+    seq: 1,
+    expectedStats: [{ key: 1, value: 1 }],
+    provedStats: [{ key: 1, value: 1, period: Infinity as any }],
+    status: "SIMULATED",
+    mode: "SIMULATION",
+  });
+  const infinitePeriodRcpt = receiptStore.getReceipts()[0];
+  if (!infinitePeriodRcpt || !Number.isFinite(infinitePeriodRcpt.provedStats[0].period)) {
+    throw new Error("Closure Probe 3 failed: receipt store allowed non-finite period!");
+  }
+
+  // Closure Probe 4: Runtime validateProofOnChain identity rejection probe with statsToProve: [null]
+  receiptStore.clear();
+  const origGetScoreProof = txLineClient.getScoreProof;
+  txLineClient.getScoreProof = async () => ({
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000, maxTimestamp: 1000, updateCount: 1 } },
+    statsToProve: [null], // Malformed array containing null
+    statProofs: [[]],
+  });
+
+  try {
+    const res = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: 1 }], false);
+    if (res.success) {
+      throw new Error("Closure Probe 4 failed: expected validateProofOnChain to fail on null statsToProve");
+    }
+    const receipts = receiptStore.getReceipts();
+    if (receipts.length !== 1) {
+      throw new Error(`Closure Probe 4 failed: expected exactly 1 receipt, got ${receipts.length}`);
+    }
+    if (receipts[0].status !== "REJECTED" || receipts[0].mode !== "PRECHECK") {
+      throw new Error(`Closure Probe 4 failed: expected REJECTED + PRECHECK, got ${receipts[0].status} + ${receipts[0].mode}`);
+    }
+    if (receipts[0].reason !== "Proof response identity check failed") {
+      throw new Error(`Closure Probe 4 failed: expected "Proof response identity check failed", got "${receipts[0].reason}"`);
+    }
+  } finally {
+    txLineClient.getScoreProof = origGetScoreProof;
+  }
+
+  // Closure Probe 5: Runtime validateProofOnChain precheck failure probe with malformed expected stats (value: NaN)
+  receiptStore.clear();
+  const resPrecheck = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: NaN }], false);
+  if (resPrecheck.success) {
+    throw new Error("Closure Probe 5 failed: expected validateProofOnChain to fail precheck for NaN value");
+  }
+  const precheckReceipts = receiptStore.getReceipts();
+  if (precheckReceipts.length !== 1) {
+    throw new Error(`Closure Probe 5 failed: expected exactly 1 precheck receipt, got ${precheckReceipts.length}`);
+  }
+  if (precheckReceipts[0].status !== "REJECTED" || precheckReceipts[0].mode !== "PRECHECK") {
+    throw new Error(`Closure Probe 5 failed: expected REJECTED + PRECHECK precheck receipt, got ${precheckReceipts[0].status} + ${precheckReceipts[0].mode}`);
   }
 
   logger.info("✓ Task 002 full requirements and closure regressions passed.");
 }
 
-function runAll() {
+async function runAll() {
   logger.info("=== Starting Unit & Race Tests ===");
   testFixtureNormalization();
   testScoreNormalization();
@@ -748,7 +889,7 @@ function runAll() {
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();
-  testTask002FullTenRequirementsAndRegressions();
+  await testTask002FullTenRequirementsAndRegressions();
   logger.info("=== All Unit & Race Tests Passed Successfully ===");
 }
 

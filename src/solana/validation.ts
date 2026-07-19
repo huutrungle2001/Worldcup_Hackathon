@@ -100,7 +100,13 @@ export function sanitizeReasonString(rawReason?: string): string | undefined {
   if (rawReason.includes("TxLINE API") || rawReason.includes("fetch proof")) {
     return "TxLINE proof request failed";
   }
-  if (rawReason.includes("mismatch") || rawReason.includes("identity check")) {
+  if (
+    rawReason.includes("mismatch") ||
+    rawReason.includes("identity check") ||
+    rawReason.includes("stat") ||
+    rawReason.includes("summary") ||
+    rawReason.includes("Response fixture ID")
+  ) {
     return "Proof response identity check failed";
   }
   if (rawReason.includes("predicate check failed") || rawReason.includes("returned false")) {
@@ -181,7 +187,7 @@ export class ReceiptStore {
         provedStats.push({
           key: s.key,
           value: s.value,
-          period: typeof s.period === "number" ? s.period : 0,
+          period: typeof s.period === "number" && Number.isFinite(s.period) ? s.period : 0,
         });
       }
     }
@@ -514,11 +520,25 @@ export class SolanaValidator {
     const paramCheck = validateProofRequestParams(fixtureId, seq, expectedStats);
     if (!paramCheck.valid) {
       logger.error(`Proof request validation failed: ${paramCheck.reason}`);
+      const safeFixtureId = typeof fixtureId === "number" && Number.isInteger(fixtureId) && fixtureId > 0 ? fixtureId : 1;
+      const safeSeq = typeof seq === "number" && Number.isInteger(seq) && seq > 0 ? seq : 1;
+      const sanitizedExpectedStats: ExpectedStat[] = Array.isArray(expectedStats)
+        ? expectedStats.filter(
+            (s) =>
+              s &&
+              typeof s === "object" &&
+              typeof s.key === "number" &&
+              Number.isInteger(s.key) &&
+              typeof s.value === "number" &&
+              Number.isFinite(s.value)
+          )
+        : [];
+
       receiptStore.addReceipt({
         id: receiptId,
-        fixtureId,
-        seq,
-        expectedStats,
+        fixtureId: safeFixtureId,
+        seq: safeSeq,
+        expectedStats: sanitizedExpectedStats,
         provedStats: [],
         proofTimestamp: 0,
         programId: programIdStr,
