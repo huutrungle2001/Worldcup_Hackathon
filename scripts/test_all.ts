@@ -891,6 +891,30 @@ async function testTask002FullTenRequirementsAndRegressions() {
     txLineClient.getScoreProof = origGetScoreProof;
   }
 
+  // Requirement 2 (Exact-closure): Mocked runtime validateProofOnChain probe with explicit period: null
+  receiptStore.clear();
+  txLineClient.getScoreProof = async () => ({
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000, maxTimestamp: 1000, updateCount: 1 } },
+    statsToProve: [{ key: 1, value: 99, period: null as any }], // Explicit null period (value 99 forces identity rejection)
+    statProofs: [[]],
+  });
+
+  try {
+    const res = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: 1 }], false);
+    if (res.success) {
+      throw new Error("Closure Probe 4b failed: expected validateProofOnChain to fail on value mismatch with period: null");
+    }
+    const receipts = receiptStore.getReceipts();
+    if (receipts.length !== 1) {
+      throw new Error(`Closure Probe 4b failed: expected exactly 1 receipt, got ${receipts.length}`);
+    }
+    if (receipts[0].provedStats.length !== 0) {
+      throw new Error(`Closure Probe 4b failed: explicit period: null was not omitted! Got provedStats: ${JSON.stringify(receipts[0].provedStats)}`);
+    }
+  } finally {
+    txLineClient.getScoreProof = origGetScoreProof;
+  }
+
   // Requirement 3: Runtime validateProofOnChain precheck failure probe (value: NaN) -> Expected stats validation failed
   receiptStore.clear();
   const resPrecheck = await solanaValidator.validateProofOnChain(123, 10, [{ key: 1, value: NaN }], false);

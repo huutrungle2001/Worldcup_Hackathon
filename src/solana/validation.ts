@@ -610,28 +610,39 @@ export class SolanaValidator {
       if (!identityCheck.valid) {
         logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
 
-        // Requirement 1: Filter malformed returned stat objects by full scalar validity before mapping; never substitute zero for invalid data
+        // Requirement 1: Property-presence-aware stat filter so explicit null/non-numeric periods are omitted and only absent periods default to 0
         let safeProvedStats: ProvedStat[] = [];
         if (Array.isArray(validationData?.statsToProve)) {
           safeProvedStats = validationData.statsToProve
             .filter((stat: any) => {
               if (!stat || typeof stat !== "object") return false;
+              const hasKey = "key" in stat || "Key" in stat;
               const k = stat.key ?? stat.Key;
+              const isKeyValid = hasKey && typeof k === "number" && Number.isInteger(k);
+
+              const hasVal = "value" in stat || "Value" in stat;
               const v = stat.value ?? stat.Value;
-              const p = stat.period ?? stat.Period;
-              const isKeyValid = typeof k === "number" && Number.isInteger(k);
-              const isValValid = typeof v === "number" && Number.isFinite(v);
-              const isPeriodValid = p === undefined || (typeof p === "number" && Number.isFinite(p));
+              const isValValid = hasVal && typeof v === "number" && Number.isFinite(v);
+
+              const hasPeriodProp =
+                ("period" in stat && stat.period !== undefined) ||
+                ("Period" in stat && stat.Period !== undefined);
+              const rawP = "period" in stat ? stat.period : stat.Period;
+              const isPeriodValid = !hasPeriodProp || (typeof rawP === "number" && Number.isFinite(rawP));
+
               return isKeyValid && isValValid && isPeriodValid;
             })
             .map((stat: any) => {
               const k = stat.key ?? stat.Key;
               const v = stat.value ?? stat.Value;
-              const p = stat.period ?? stat.Period;
+              const hasPeriodProp =
+                ("period" in stat && stat.period !== undefined) ||
+                ("Period" in stat && stat.Period !== undefined);
+              const rawP = "period" in stat ? stat.period : stat.Period;
               return {
                 key: k,
                 value: v,
-                period: typeof p === "number" && Number.isFinite(p) ? p : 0,
+                period: hasPeriodProp ? (rawP as number) : 0,
               };
             });
         }

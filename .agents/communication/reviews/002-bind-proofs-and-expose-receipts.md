@@ -9,6 +9,7 @@
 - **Closure candidate reviewed commit:** `5a945028b4dc372557f0ec4478a2f842ea3fca51`
 - **Final closure candidate reviewed commit:** `7a84886a40dc82facd5dbfe63c4d77d45065ad95`
 - **Mechanical closure candidate reviewed commit:** `356a180088a48d0697b952ccdb4c7e443598206f`
+- **Exact-closure candidate reviewed commit:** `11b47e7174acb5f5509a9eb2527fcd0545a137de`
 - **Reviewer:** Codex
 - **Review date:** 2026-07-20
 
@@ -18,6 +19,87 @@ receipts, empty API filters, and the missing dashboard timestamp/signature
 guard. It is not ready to approve because exact proof-set binding, public
 receipt integrity, active-network metadata, and the required regression
 coverage remain incomplete.
+
+## Exact-closure Re-review — `11b47e7`
+
+### Decision: `REQUEST_CHANGES`
+
+The candidate correctly omits the tested malformed boolean/`Infinity` stat,
+enforces the direct receipt-store period boundary, classifies malformed
+expected-stat prechecks truthfully, and makes the reordered/duplicate cases
+structurally independent. All required commands pass. One untested scalar path
+still substitutes period zero for explicitly malformed returned data, and the
+execution log still overstates the baseline diff.
+
+### 1. High — Explicit `null` returned periods bypass the strict omission boundary
+
+The rejection mapper in
+[`src/solana/validation.ts`](../../../src/solana/validation.ts#L613) resolves
+period with `stat.period ?? stat.Period`. This makes an explicitly provided
+`period: null` indistinguishable from an absent period. The entry passes the
+`p === undefined` filter and is then published with `period: 0`.
+
+A no-network mocked `validateProofOnChain` probe used a valid numeric key, a
+mismatching finite value (to enter the rejection path), and `period: null`.
+The direct `ReceiptStore` correctly rejected the same explicit `null` period,
+but the validator stored this public rejected-proof evidence:
+
+```json
+{"provedStats":[{"key":1,"value":2,"period":0}]}
+```
+
+Distinguish property absence from an explicitly present lower- or upper-case
+period field. Omit a returned stat when a present period is non-numeric or
+non-finite; default to `0` only when neither period property is present. Add a
+mocked runtime regression for an explicitly provided non-numeric period and
+assert exactly one rejected receipt with `provedStats: []`.
+
+### 2. Low — The execution log still reports a zero-deletion baseline diff
+
+The log claims “100% ... verbatim without baseline deletions” and “Baseline
+diff clean with 0 deletions.” However:
+
+```text
+git diff --numstat 3fe2546..11b47e7 -- scripts/test_all.ts
+352  1  scripts/test_all.ts
+```
+
+The original `logger.info("=== All Unit & Race Tests Passed Successfully ===")`
+line was intentionally moved into the Task 002 promise callback at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L922). Its text remains,
+and the `function runAll()` declaration is restored, but the execution log
+must acknowledge the one intentional relocation rather than claim zero
+deletions. This satisfies the previously offered “preserve or report
+precisely” alternative without requiring another test-runner rewrite.
+
+### Exact-closure Candidate Verification
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn typecheck` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; `TEST_MODE` only |
+| `cd dashboard && yarn lint` | Passed, exit `0` |
+| `cd dashboard && yarn build` | Passed, exit `0`; non-blocking workspace-root warning |
+| `git diff 356a180..11b47e7 --check` | Passed, exit `0` |
+| Commit signing | SSH signature block is present; local trust verification unavailable because `gpg.ssh.allowedSignersFile` is not configured |
+| Standard closure probes | Passed: boolean/`Infinity` omission, absent/direct `Infinity` period boundary, exact precheck reason, independent order/duplicate cases |
+| Additional period probe | Failed: explicit `null` returned period was rewritten to `0` in a rejected receipt |
+| Baseline diff | One intentionally relocated line; execution log incorrectly reports zero deletions |
+| Network/on-chain activity | No live network, stream, RPC, `.view()`, `.rpc()`, or transaction command was run |
+
+### Final Bounded Requirements
+
+1. Make the rejected-proof stat filter property-presence-aware so explicit
+   `null`/string/non-finite periods are omitted and only a truly absent period
+   defaults to `0`.
+2. Add the direct mocked `period: null` (or equivalent explicit non-numeric
+   period) regression with an exact empty-`provedStats` receipt assertion.
+3. Correct the execution log to report the single intentional Task 001 success
+   log relocation instead of claiming a zero-deletion diff.
+4. Rerun the complete local command set, create a signed conventional
+   follow-up commit, and notify Codex through tmux. Task 003 remains queued
+   until Task 002 receives `APPROVE`.
 
 ## Mechanical Closure Re-review — `356a180`
 
