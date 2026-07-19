@@ -2,13 +2,13 @@
 
 ## Status
 
-**QUEUED — START ONLY AFTER TASK 002 IS APPROVED**
+**READY — TASK 002 APPROVED; START IMMEDIATELY**
 
 ## Assignment
 
 - **Implementer:** Agy
 - **Reviewer:** Codex
-- **Priority:** Critical / judge demo usability
+- **Priority:** Deadline-critical / recordable judge demo usability
 - **Primary framework:** Playwright with Chromium
 - **Dependency:** Task 002 closure review must be `APPROVE`
 
@@ -19,6 +19,10 @@ the historical replay control truthfully observable. Clicking the primary demo
 action must always produce visible loading, running, completed, or actionable
 failure feedback. Add deterministic Playwright tests for the complete browser
 journey without calling TxLINE, Solana RPC, or any external service.
+
+The deliverable must be usable as the single, repeatable path for recording the
+submission demo video: open the page, understand the product, run the
+historical demo, observe market/proof transitions, and inspect the receipt.
 
 The current failure is concrete:
 

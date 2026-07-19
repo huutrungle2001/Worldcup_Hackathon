@@ -4,8 +4,37 @@ import { normalizeScoreEvent, normalizeOddsUpdate } from "../domain/types";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
 
+export type ReplayState =
+  | "IDLE"
+  | "LOADING"
+  | "RUNNING"
+  | "PAUSED"
+  | "COMPLETED"
+  | "FAILED";
+
+export interface ReplayStatus {
+  enabled: boolean;
+  state: ReplayState;
+  activeFixtureId: number | null;
+  demoFixtureId: number | null;
+  speed: number;
+  currentStep: number;
+  totalSteps: number;
+  message: string;
+  error: string | null;
+  lastUpdated: string;
+}
+
+export interface ReplayActionResult {
+  success: boolean;
+  status: ReplayStatus;
+  error?: string;
+  statusCode?: number;
+}
+
 export class ReplayEngine {
   private activeFixtureId: number | null = null;
+  private state: ReplayState = "IDLE";
   private isPaused = false;
   private speedMultiplier = 1;
   private timeoutId: NodeJS.Timeout | null = null;
@@ -13,9 +42,68 @@ export class ReplayEngine {
   private historicalRecords: any[] = [];
   private lastScoreOne = 0;
   private lastScoreTwo = 0;
+  private statusMessage = "Replay system idle";
+  private errorMessage: string | null = null;
+  private lastUpdated: string = new Date().toISOString();
+  private replayGeneration = 0;
 
-  public async startReplay(fixtureId: number, speed = 1) {
-    this.stopReplay();
+  public getDemoFixtureId(): number | null {
+    const raw = process.env.DEMO_FIXTURE_ID;
+    if (!raw) return null;
+    const val = Number(raw);
+    return Number.isInteger(val) && val > 0 ? val : null;
+  }
+
+  public isEnabled(): boolean {
+    return process.env.DEMO_REPLAY_ENABLED === "true";
+  }
+
+  public getStatus(): ReplayStatus {
+    return {
+      enabled: this.isEnabled(),
+      state: this.state,
+      activeFixtureId: this.activeFixtureId,
+      demoFixtureId: this.getDemoFixtureId(),
+      speed: this.speedMultiplier,
+      currentStep: this.currentStep,
+      totalSteps: this.historicalRecords.length,
+      message: this.statusMessage,
+      error: this.errorMessage,
+      lastUpdated: this.lastUpdated,
+    };
+  }
+
+  private updateStatus(state: ReplayState, message: string, error: string | null = null) {
+    this.state = state;
+    this.statusMessage = message;
+    this.errorMessage = error;
+    this.lastUpdated = new Date().toISOString();
+    healthMonitor.setReplayMode(state === "RUNNING" || state === "PAUSED" || state === "LOADING");
+  }
+
+  public async startReplay(fixtureId: number, speed = 1): Promise<ReplayActionResult> {
+    if (!this.isEnabled()) {
+      const msg = "Public demo replay is disabled on this server.";
+      this.updateStatus("FAILED", "Demo replay disabled", msg);
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 403 };
+    }
+
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      const msg = "Fixture ID must be a positive integer.";
+      this.updateStatus("FAILED", "Invalid fixture ID", msg);
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
+    }
+
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 50) {
+      const msg = "Replay speed must be a finite number between 1 and 50.";
+      this.updateStatus("FAILED", "Invalid replay speed", msg);
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
+    }
+
+    // Cancel previous replay and increment generation counter
+    this.stopReplayInternal();
+    this.replayGeneration++;
+    const currentGen = this.replayGeneration;
 
     this.activeFixtureId = fixtureId;
     this.speedMultiplier = speed;
@@ -23,26 +111,25 @@ export class ReplayEngine {
     this.currentStep = 0;
     this.lastScoreOne = 0;
     this.lastScoreTwo = 0;
-    healthMonitor.setReplayMode(true);
+    this.updateStatus("LOADING", `Loading historical score records for fixture ${fixtureId}...`);
 
-    logger.info(
-      `Starting historical replay for fixture ${fixtureId} with speed ${speed}x...`
-    );
+    logger.info(`Starting historical replay fetch for fixture ${fixtureId} at ${speed}x...`);
 
     try {
-      logger.info(
-        `Fetching historical score records for fixture ${fixtureId}...`
-      );
       const response = await txLineClient.request<any[]>({
         url: `/scores/historical/${fixtureId}`,
       });
 
-      if (!response || response.length === 0) {
-        logger.error(
-          `No historical score records found for fixture ${fixtureId}`
-        );
-        healthMonitor.setReplayMode(false);
-        return;
+      // If user stopped or started a new replay during fetch, abort this callback
+      if (this.replayGeneration !== currentGen) {
+        return { success: false, status: this.getStatus(), error: "Replay attempt cancelled." };
+      }
+
+      if (!response || !Array.isArray(response) || response.length === 0) {
+        const msg = `No historical score records found for fixture ${fixtureId}.`;
+        logger.error(msg);
+        this.updateStatus("FAILED", `No historical records for fixture ${fixtureId}`, msg);
+        return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
       }
 
       this.historicalRecords = response.sort((a, b) => {
@@ -51,30 +138,39 @@ export class ReplayEngine {
         return seqA - seqB;
       });
 
-      logger.info(
-        `✓ Loaded ${this.historicalRecords.length} historical updates for replay.`
-      );
+      logger.info(`✓ Loaded ${this.historicalRecords.length} historical updates for replay.`);
+      this.updateStatus("RUNNING", `Replaying fixture ${fixtureId} (${this.historicalRecords.length} steps)...`);
       this.executeNextStep();
+      return { success: true, status: this.getStatus() };
     } catch (err: any) {
-      logger.error(`Failed to fetch historical replay data:`, err);
-      healthMonitor.setReplayMode(false);
+      if (this.replayGeneration !== currentGen) {
+        return { success: false, status: this.getStatus(), error: "Replay attempt cancelled." };
+      }
+      const msg = `Failed to fetch historical replay data for fixture ${fixtureId}.`;
+      logger.error(msg, err);
+      this.updateStatus("FAILED", `Fetch error for fixture ${fixtureId}`, msg);
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 500 };
     }
   }
 
   private executeNextStep() {
-    if (this.isPaused || this.currentStep >= this.historicalRecords.length) {
-      if (this.currentStep >= this.historicalRecords.length) {
-        logger.info("Replay completed successfully!");
-        healthMonitor.setReplayMode(false);
-      }
+    if (this.isPaused) return;
+
+    if (this.currentStep >= this.historicalRecords.length) {
+      logger.info("Replay completed successfully!");
+      this.updateStatus("COMPLETED", `Replay completed for fixture ${this.activeFixtureId}.`);
       return;
     }
 
     const currentRecord = this.historicalRecords[this.currentStep];
+    const seqNum = currentRecord.Seq ?? currentRecord.seq;
+    this.updateStatus(
+      "RUNNING",
+      `Replaying step ${this.currentStep + 1}/${this.historicalRecords.length} (Seq ${seqNum})`
+    );
+
     logger.info(
-      `Replaying step ${this.currentStep + 1}/${
-        this.historicalRecords.length
-      } | Seq: ${currentRecord.Seq ?? currentRecord.seq}`
+      `Replaying step ${this.currentStep + 1}/${this.historicalRecords.length} | Seq: ${seqNum}`
     );
 
     try {
@@ -88,26 +184,27 @@ export class ReplayEngine {
       riskAgent.handleScoreEvent(normalizedScore);
 
       if (isGoal) {
-        logger.info(
-          `[REPLAY ENGINE] Synthesizing matching fresh repriced odds to reopen market...`
-        );
+        logger.info(`[REPLAY ENGINE] Synthesizing matching fresh repriced odds to reopen market...`);
+        const oddsDelay = Math.max(100, Math.floor(5000 / this.speedMultiplier));
         setTimeout(() => {
-          try {
-            const mockOdds = normalizeOddsUpdate({
-              fixtureId: normalizedScore.fixtureId,
-              seq: normalizedScore.seq + 1000,
-              ts: normalizedScore.ts + 5000,
-              SuperOddsType: "1X2_PARTICIPANT_RESULT",
-              PriceNames: ["part1", "draw", "part2"],
-              Prices: [1350, 4200, 8000],
-            });
-            if (mockOdds) {
-              riskAgent.handleOddsUpdate(mockOdds);
+          if (this.state === "RUNNING" || this.state === "PAUSED") {
+            try {
+              const mockOdds = normalizeOddsUpdate({
+                fixtureId: normalizedScore.fixtureId,
+                seq: normalizedScore.seq + 1000,
+                ts: normalizedScore.ts + 5000,
+                SuperOddsType: "1X2_PARTICIPANT_RESULT",
+                PriceNames: ["part1", "draw", "part2"],
+                Prices: [1350, 4200, 8000],
+              });
+              if (mockOdds) {
+                riskAgent.handleOddsUpdate(mockOdds);
+              }
+            } catch (err) {
+              logger.error("Error handling synthesized odds update:", err);
             }
-          } catch (err) {
-            logger.error("Error handling synthesized odds update:", err);
           }
-        }, 5000 / this.speedMultiplier);
+        }, oddsDelay);
       }
     } catch (err) {
       logger.error("Error replaying score update:", err);
@@ -120,47 +217,71 @@ export class ReplayEngine {
       const nextTs = nextRecord.Ts ?? nextRecord.ts ?? Date.now();
 
       const timeDiff = Math.max(0, nextTs - currentTs);
-      const delay = timeDiff / this.speedMultiplier;
+      const delay = Math.max(50, Math.floor(timeDiff / this.speedMultiplier));
 
       logger.debug(`Scheduling next replay step in ${delay}ms...`);
       this.timeoutId = setTimeout(() => this.executeNextStep(), delay);
     } else {
-      this.executeNextStep();
+      logger.info("Replay reached final step.");
+      this.updateStatus("COMPLETED", `Replay completed for fixture ${this.activeFixtureId}.`);
     }
   }
 
-  public setSpeed(speed: number) {
+  public setSpeed(speed: number): ReplayActionResult {
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < 1 || speed > 50) {
+      const msg = "Replay speed must be a finite number between 1 and 50.";
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
+    }
     logger.info(`Replay speed changed to ${speed}x`);
     this.speedMultiplier = speed;
+    this.lastUpdated = new Date().toISOString();
+    return { success: true, status: this.getStatus() };
   }
 
-  public pause() {
+  public pause(): ReplayActionResult {
+    if (this.state !== "RUNNING") {
+      const msg = `Cannot pause replay when state is ${this.state}. Must be RUNNING.`;
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 409 };
+    }
     logger.info("Replay paused.");
     this.isPaused = true;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
+    this.updateStatus("PAUSED", `Replay paused at step ${this.currentStep}/${this.historicalRecords.length}.`);
+    return { success: true, status: this.getStatus() };
   }
 
-  public resume() {
-    if (this.isPaused) {
-      logger.info("Replay resumed.");
-      this.isPaused = false;
-      this.executeNextStep();
+  public resume(): ReplayActionResult {
+    if (this.state !== "PAUSED") {
+      const msg = `Cannot resume replay when state is ${this.state}. Must be PAUSED.`;
+      return { success: false, status: this.getStatus(), error: msg, statusCode: 409 };
     }
+    logger.info("Replay resumed.");
+    this.isPaused = false;
+    this.updateStatus("RUNNING", `Replay resumed at step ${this.currentStep + 1}/${this.historicalRecords.length}.`);
+    this.executeNextStep();
+    return { success: true, status: this.getStatus() };
   }
 
-  public stopReplay() {
+  private stopReplayInternal() {
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
+    this.isPaused = false;
+  }
+
+  public stopReplay(): ReplayActionResult {
+    this.replayGeneration++;
+    this.stopReplayInternal();
     this.activeFixtureId = null;
     this.historicalRecords = [];
     this.currentStep = 0;
-    healthMonitor.setReplayMode(false);
+    this.updateStatus("IDLE", "Replay stopped.");
     logger.info("Replay stopped.");
+    return { success: true, status: this.getStatus() };
   }
 }
 

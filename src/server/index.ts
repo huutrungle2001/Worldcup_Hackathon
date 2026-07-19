@@ -4,6 +4,7 @@ import { marketManager } from "../agent/market";
 import { healthMonitor } from "../utils/health";
 import { logger } from "../utils/logger";
 import { replayEngine } from "../replay";
+import { receiptStore } from "../solana/validation";
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -17,7 +18,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin as string)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
@@ -27,24 +28,43 @@ app.use(
 );
 app.use(express.json());
 
-// Simple authorization middleware to prevent unauthorized replay usage (Finding 7)
-const adminAuth = (
+// In-memory rate limiting map for replay controls (max 30 requests per minute per IP)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+const demoReplayGate = (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
 ) => {
-  const token = req.headers["x-admin-token"] || req.query.adminToken;
-  const adminSecret = process.env.ADMIN_SECRET || "proofguard-secret-key-123";
-  if (token !== adminSecret) {
-    logger.warn(`Unauthenticated attempt to access replay control endpoints.`);
-    return res
-      .status(401)
-      .json({ error: "Unauthorized access to replay controls." });
+  if (!replayEngine.isEnabled()) {
+    logger.warn(`Attempted to access replay endpoint while DEMO_REPLAY_ENABLED is false.`);
+    return res.status(403).json({
+      error: "Public demo replay is disabled on this server. Set DEMO_REPLAY_ENABLED=true in server configuration.",
+      code: "DEMO_REPLAY_DISABLED",
+    });
   }
+
+  const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const limitWindow = 60 * 1000;
+  const maxRequests = 30;
+
+  const current = rateLimitMap.get(clientIp);
+  if (!current || now > current.resetAt) {
+    rateLimitMap.set(clientIp, { count: 1, resetAt: now + limitWindow });
+  } else {
+    current.count++;
+    if (current.count > maxRequests) {
+      logger.warn(`Rate limit exceeded for client IP: ${clientIp}`);
+      return res.status(429).json({
+        error: "Too many replay requests. Please wait a moment before trying again.",
+        code: "RATE_LIMITED",
+      });
+    }
+  }
+
   next();
 };
-
-import { receiptStore } from "../solana/validation";
 
 app.get("/api/health", (req, res) => {
   res.json(healthMonitor.getHealth());
@@ -94,60 +114,94 @@ app.get("/api/markets/:fixtureId/audit", (req, res) => {
 app.get("/api/diagnostics", (req, res) => {
   res.json({
     health: healthMonitor.getHealth(),
+    replayStatus: replayEngine.getStatus(),
     timestamp: new Date().toISOString(),
   });
 });
 
-app.post("/api/replay/start", adminAuth, (req, res) => {
+app.get("/api/replay/status", (req, res) => {
+  res.json(replayEngine.getStatus());
+});
+
+app.post("/api/replay/start", demoReplayGate, async (req, res) => {
   const { fixtureId, speed } = req.body;
   const numId = Number(fixtureId);
-  const numSpeed = Number(speed || 1);
+  const numSpeed = speed !== undefined ? Number(speed) : 1;
 
-  if (isNaN(numId) || numId <= 0) {
-    return res
-      .status(400)
-      .json({ error: "Invalid or missing fixtureId in request body." });
+  if (isNaN(numId) || !Number.isInteger(numId) || numId <= 0) {
+    return res.status(400).json({
+      error: "Invalid or missing fixtureId. Must be a positive integer.",
+      status: replayEngine.getStatus(),
+    });
   }
   if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 50) {
-    return res
-      .status(400)
-      .json({ error: "Replay speed must be between 1 and 50." });
+    return res.status(400).json({
+      error: "Replay speed must be a number between 1 and 50.",
+      status: replayEngine.getStatus(),
+    });
   }
 
-  replayEngine.startReplay(numId, numSpeed);
+  const result = await replayEngine.startReplay(numId, numSpeed);
+  if (!result.success) {
+    return res.status(result.statusCode || 400).json({
+      error: result.error || "Failed to start replay.",
+      status: result.status,
+    });
+  }
+
   res.json({
     success: true,
-    message: `Replay started for fixture ${numId} at speed ${numSpeed}x`,
+    status: result.status,
   });
 });
 
-app.post("/api/replay/pause", adminAuth, (req, res) => {
-  replayEngine.pause();
-  res.json({ success: true, message: "Replay paused" });
+app.post("/api/replay/pause", demoReplayGate, (req, res) => {
+  const result = replayEngine.pause();
+  if (!result.success) {
+    return res.status(result.statusCode || 409).json({
+      error: result.error,
+      status: result.status,
+    });
+  }
+  res.json({ success: true, status: result.status });
 });
 
-app.post("/api/replay/resume", adminAuth, (req, res) => {
-  replayEngine.resume();
-  res.json({ success: true, message: "Replay resumed" });
+app.post("/api/replay/resume", demoReplayGate, (req, res) => {
+  const result = replayEngine.resume();
+  if (!result.success) {
+    return res.status(result.statusCode || 409).json({
+      error: result.error,
+      status: result.status,
+    });
+  }
+  res.json({ success: true, status: result.status });
 });
 
-app.post("/api/replay/stop", adminAuth, (req, res) => {
-  replayEngine.stopReplay();
-  res.json({ success: true, message: "Replay stopped" });
+app.post("/api/replay/stop", demoReplayGate, (req, res) => {
+  const result = replayEngine.stopReplay();
+  res.json({ success: true, status: result.status });
 });
 
-app.post("/api/replay/speed", adminAuth, (req, res) => {
+app.post("/api/replay/speed", demoReplayGate, (req, res) => {
   const { speed } = req.body;
   const numSpeed = Number(speed);
 
   if (isNaN(numSpeed) || numSpeed < 1 || numSpeed > 50) {
-    return res
-      .status(400)
-      .json({ error: "Replay speed must be between 1 and 50." });
+    return res.status(400).json({
+      error: "Replay speed must be a number between 1 and 50.",
+      status: replayEngine.getStatus(),
+    });
   }
 
-  replayEngine.setSpeed(numSpeed);
-  res.json({ success: true, message: `Replay speed set to ${numSpeed}x` });
+  const result = replayEngine.setSpeed(numSpeed);
+  if (!result.success) {
+    return res.status(result.statusCode || 400).json({
+      error: result.error,
+      status: result.status,
+    });
+  }
+
+  res.json({ success: true, status: result.status });
 });
 
 export function startServer() {
