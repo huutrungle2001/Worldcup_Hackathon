@@ -4,6 +4,7 @@ import { program, connection, walletKeypair } from "./index";
 import { txLineClient } from "../txline/api";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
+import { appConfig } from "../config";
 
 export function toBytes32(value: string | number[] | Uint8Array): number[] {
   const bytes = Array.isArray(value)
@@ -69,11 +70,38 @@ export interface SanitizedReceipt {
 }
 
 /**
- * Sanitizes reason messages by stripping secrets, file paths, URLs, and token headers.
+ * Controlled public reason code and message mapping to prevent credential leakage.
  */
 export function sanitizeReasonString(rawReason?: string): string | undefined {
   if (!rawReason || typeof rawReason !== "string") return undefined;
 
+  // Controlled public error codes mapping
+  if (rawReason.includes("Invalid fixtureId") || rawReason.includes("Invalid sequence")) {
+    return "Proof request parameter validation failed";
+  }
+  if (rawReason.includes("Unsupported") || rawReason.includes("Expected stats")) {
+    return "Expected stats validation failed";
+  }
+  if (rawReason.includes("TxLINE API") || rawReason.includes("fetch proof")) {
+    return "TxLINE proof request failed";
+  }
+  if (rawReason.includes("mismatch") || rawReason.includes("identity check")) {
+    return "Proof response identity check failed";
+  }
+  if (rawReason.includes("predicate check failed") || rawReason.includes("returned false")) {
+    return "On-chain simulation predicate check failed";
+  }
+  if (rawReason.includes("Low wallet balance")) {
+    return "Low wallet balance fallback to simulation";
+  }
+  if (rawReason.includes("simulation execution failed") || rawReason.includes("Simulation error")) {
+    return "On-chain simulation execution failed";
+  }
+  if (rawReason.includes("transaction submission failed") || rawReason.includes("Transaction error")) {
+    return "Validation transaction submission failed";
+  }
+
+  // Fallback scrub of any credential patterns
   return rawReason
     .replace(/(bearer|jwt|token|secret|x-api-token|authorization)[=:\s]+[^\s;]+/gi, "$1: [REDACTED]")
     .replace(/https?:\/\/[^\s]+/gi, "[REDACTED_URL]")
@@ -87,10 +115,26 @@ export class ReceiptStore {
   public addReceipt(rawReceipt: any): void {
     if (!rawReceipt || typeof rawReceipt !== "object") return;
 
-    // Strict explicit field allowlisting and deep copy
-    const fixtureId = Number(rawReceipt.fixtureId);
-    const seq = Number(rawReceipt.seq);
-    const proofTimestamp = Number(rawReceipt.proofTimestamp ?? 0);
+    // Strict non-coercive numeric validation for required public identity fields
+    const fixtureId = rawReceipt.fixtureId;
+    const seq = rawReceipt.seq;
+
+    if (
+      typeof fixtureId !== "number" ||
+      !Number.isInteger(fixtureId) ||
+      fixtureId <= 0 ||
+      typeof seq !== "number" ||
+      !Number.isInteger(seq) ||
+      seq <= 0
+    ) {
+      // Reject malformed non-numeric or non-positive receipt identity fields
+      return;
+    }
+
+    const proofTimestamp =
+      typeof rawReceipt.proofTimestamp === "number" && Number.isFinite(rawReceipt.proofTimestamp)
+        ? rawReceipt.proofTimestamp
+        : 0;
 
     const expectedStats: ExpectedStat[] = Array.isArray(rawReceipt.expectedStats)
       ? rawReceipt.expectedStats.map((s: any) => ({
@@ -107,39 +151,37 @@ export class ReceiptStore {
         }))
       : [];
 
-    const status: "CONFIRMED" | "SIMULATED" | "REJECTED" | "FAILED" = [
-      "CONFIRMED",
-      "SIMULATED",
-      "REJECTED",
-      "FAILED",
-    ].includes(rawReceipt.status)
-      ? rawReceipt.status
-      : "FAILED";
+    const status: "CONFIRMED" | "SIMULATED" | "REJECTED" | "FAILED" = rawReceipt.status;
+    const mode: "TRANSACTION" | "SIMULATION" | "PRECHECK" = rawReceipt.mode;
 
-    const mode: "TRANSACTION" | "SIMULATION" | "PRECHECK" = [
-      "TRANSACTION",
-      "SIMULATION",
-      "PRECHECK",
-    ].includes(rawReceipt.mode)
-      ? rawReceipt.mode
-      : "PRECHECK";
+    if (!["CONFIRMED", "SIMULATED", "REJECTED", "FAILED"].includes(status)) {
+      return;
+    }
+    if (!["TRANSACTION", "SIMULATION", "PRECHECK"].includes(mode)) {
+      return;
+    }
 
-    const network = typeof rawReceipt.network === "string" ? rawReceipt.network : "devnet";
-    const programId = typeof rawReceipt.programId === "string" ? rawReceipt.programId : program.programId.toBase58();
+    // Enforce strict valid status + mode shape invariants
+    if (status === "CONFIRMED" && mode !== "TRANSACTION") return;
+    if (status === "SIMULATED" && mode !== "SIMULATION") return;
+    if (status === "REJECTED" && mode !== "PRECHECK") return;
+
+    let signature: string | undefined = undefined;
+    let explorerUrl: string | undefined = undefined;
+
+    const network = typeof rawReceipt.network === "string" ? rawReceipt.network : appConfig.network;
+    const programId = typeof rawReceipt.programId === "string" ? rawReceipt.programId : appConfig.programId.toBase58();
     const pda = typeof rawReceipt.pda === "string" ? rawReceipt.pda : undefined;
     const validatedAt = typeof rawReceipt.validatedAt === "string" ? rawReceipt.validatedAt : new Date().toISOString();
     const id = typeof rawReceipt.id === "string" ? rawReceipt.id : `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // Invariant Enforcement
-    let signature: string | undefined = undefined;
-    let explorerUrl: string | undefined = undefined;
-
     if (status === "CONFIRMED") {
-      if (mode === "TRANSACTION" && typeof rawReceipt.signature === "string" && rawReceipt.signature.trim().length > 0) {
+      if (typeof rawReceipt.signature === "string" && rawReceipt.signature.trim().length > 0) {
         signature = rawReceipt.signature.trim();
-        explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=${network}`;
+        const cluster = network === "mainnet" ? "mainnet-beta" : network;
+        explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=${cluster}`;
       } else {
-        // Contradictory confirmed status without signature fails invariant enforcement
+        // CONFIRMED without signature violates store invariants
         return;
       }
     }
@@ -171,10 +213,12 @@ export class ReceiptStore {
   }
 
   public getReceipts(fixtureId?: number): SanitizedReceipt[] {
+    let result = this.receipts;
     if (fixtureId !== undefined && fixtureId > 0) {
-      return this.receipts.filter((r) => r.fixtureId === fixtureId);
+      result = this.receipts.filter((r) => r.fixtureId === fixtureId);
     }
-    return this.receipts;
+    // Defensive copy to prevent callers from mutating internal store
+    return JSON.parse(JSON.stringify(result));
   }
 
   public clear(): void {
@@ -423,11 +467,13 @@ export class SolanaValidator {
     expectedStats: ExpectedStat[],
     submitReceipt = true
   ): Promise<VerificationResult> {
-    const programIdStr = program.programId.toBase58();
-    const networkStr = process.env.SOLANA_NETWORK || "devnet";
+    const programIdStr = appConfig.programId.toBase58();
+    const networkStr = appConfig.network;
     const receiptId = `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // 1. Validate request params and expected stats BEFORE external calls
+    // STAGE 1: PRECHECK / FETCH
+    let currentStage: "PRECHECK" | "SIMULATION" | "TRANSACTION" = "PRECHECK";
+
     const paramCheck = validateProofRequestParams(fixtureId, seq, expectedStats);
     if (!paramCheck.valid) {
       logger.error(`Proof request validation failed: ${paramCheck.reason}`);
@@ -476,51 +522,52 @@ export class SolanaValidator {
         network: networkStr,
         status: "FAILED",
         mode: "PRECHECK",
-        reason: `Failed to fetch proof from TxLINE API: ${err.message || err}`,
+        reason: "TxLINE proof request failed",
         validatedAt: new Date().toISOString(),
       });
       return { success: false, provedStats: [] };
     }
 
-    // Wrap post-fetch pipeline in try/catch to record sanitized failure receipt on any error
-    try {
-      // 2. Validate response identity before Solana calls
-      const identityCheck = validateProofIdentity(
+    const identityCheck = validateProofIdentity(
+      fixtureId,
+      seq,
+      expectedStats,
+      validationData
+    );
+    if (!identityCheck.valid) {
+      logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
+      const provedStats: ProvedStat[] = Array.isArray(validationData?.statsToProve)
+        ? validationData.statsToProve.map((stat: any) => ({
+            key: Number(stat.key ?? stat.Key ?? 0),
+            value: Number(stat.value ?? stat.Value ?? 0),
+            period: Number(stat.period ?? stat.Period ?? 0),
+          }))
+        : [];
+
+      const minTs = Number(validationData?.summary?.updateStats?.minTimestamp ?? 0);
+
+      receiptStore.addReceipt({
+        id: receiptId,
         fixtureId,
         seq,
         expectedStats,
-        validationData
-      );
-      if (!identityCheck.valid) {
-        logger.error(`Proof response identity check failed: ${identityCheck.reason}`);
-        const provedStats: ProvedStat[] = Array.isArray(validationData?.statsToProve)
-          ? validationData.statsToProve.map((stat: any) => ({
-              key: Number(stat.key ?? stat.Key ?? 0),
-              value: Number(stat.value ?? stat.Value ?? 0),
-              period: Number(stat.period ?? stat.Period ?? 0),
-            }))
-          : [];
+        provedStats,
+        proofTimestamp: minTs,
+        programId: programIdStr,
+        network: networkStr,
+        status: "REJECTED",
+        mode: "PRECHECK",
+        reason: identityCheck.reason,
+        validatedAt: new Date().toISOString(),
+      });
+      return { success: false, provedStats: [] };
+    }
 
-        const minTs = Number(validationData?.summary?.updateStats?.minTimestamp ?? 0);
+    const minTs = Number(validationData.summary.updateStats.minTimestamp);
 
-        receiptStore.addReceipt({
-          id: receiptId,
-          fixtureId,
-          seq,
-          expectedStats,
-          provedStats,
-          proofTimestamp: minTs,
-          programId: programIdStr,
-          network: networkStr,
-          status: "REJECTED",
-          mode: "PRECHECK",
-          reason: identityCheck.reason,
-          validatedAt: new Date().toISOString(),
-        });
-        return { success: false, provedStats: [] };
-      }
-
-      const minTs = Number(validationData.summary.updateStats.minTimestamp);
+    // STAGE 2: SIMULATION
+    currentStage = "SIMULATION";
+    try {
       const dailyScoresPda = this.deriveDailyScoresPda(minTs);
       const pdaStr = dailyScoresPda.toBase58();
 
@@ -554,7 +601,6 @@ export class SolanaValidator {
         })),
       };
 
-      // 3. Build non-tautological strategy predicates from expectedStats
       const strategy = buildV2Strategy(expectedStats);
 
       const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
@@ -586,7 +632,7 @@ export class SolanaValidator {
           network: networkStr,
           status: "FAILED",
           mode: "SIMULATION",
-          reason: "On-chain simulation returned false",
+          reason: "On-chain simulation predicate check failed",
           validatedAt: new Date().toISOString(),
         });
         return { success: false, provedStats };
@@ -640,6 +686,8 @@ export class SolanaValidator {
         return { success: true, provedStats };
       }
 
+      // STAGE 3: TRANSACTION EXECUTION
+      currentStage = "TRANSACTION";
       logger.info(
         "Submitting validation receipt transaction (skipPreflight: false)..."
       );
@@ -683,12 +731,15 @@ export class SolanaValidator {
         seq,
         expectedStats,
         provedStats: [],
-        proofTimestamp: 0,
+        proofTimestamp: minTs,
         programId: programIdStr,
         network: networkStr,
         status: "FAILED",
-        mode: "SIMULATION",
-        reason: `Validation error: ${err.message || err}`,
+        mode: currentStage, // Accurately reflects TRANSACTION if .rpc() failed!
+        reason:
+          currentStage === "TRANSACTION"
+            ? "Validation transaction submission failed"
+            : "On-chain simulation execution failed",
         validatedAt: new Date().toISOString(),
       });
 

@@ -4,7 +4,7 @@
 
 - **Task Name:** Task 002 — Bind TxLINE Proofs and Expose Verification Receipts
 - **Implementer:** Agy
-- **Review Decision:** `REQUEST_CHANGES` (Follow-up complete & verified)
+- **Review Decision:** `REQUEST_CHANGES` (Follow-up Re-review `503bfad` addressed)
 - **Status:** **COMPLETE** (Ready for Codex re-review)
 
 ---
@@ -12,37 +12,29 @@
 ## Files Changed
 
 1. [`src/solana/validation.ts`](../../../src/solana/validation.ts):
-   - **Finding 5**: Updated `validateExpectedStatsPrecheck` to accept ONLY total-goal keys `1` and `2`, rejecting any other keys (e.g. key `3001`). Added `validateProofRequestParams` to validate `fixtureId` and `seq` as positive integers before calling TxLINE.
-   - **Finding 6**: Updated `validateProofIdentity` to enforce non-coercive numeric checks on `fixtureId`, `seq`, `minTimestamp`, stat keys, and stat values (rejecting coercible strings `"123"` or booleans `false`).
-   - **Finding 2**: Rewrote `ReceiptStore.addReceipt` with explicit field allowlisting, deep-copying, and invariant enforcement (`CONFIRMED` requires `mode: "TRANSACTION"` and `signature`, non-confirmed receipts strictly omit signature/explorer URL). Added `sanitizeReasonString` to redact bearer tokens, secrets, file paths, and URLs from reason strings.
-   - **Finding 7**: Wrapped all post-fetch validation, PDA derivation, strategy generation, `.view()`, balance lookup, and `.rpc()` calls inside `try ... catch` to guarantee exactly one sanitized terminal failure receipt on error.
+   - **Follow-up Finding 2 & 3**: Added strict field allowlisting, non-coercive numeric type checking (`typeof fixtureId === "number" && Number.isInteger(fixtureId) && fixtureId > 0`), controlled public reason string mapping (`sanitizeReasonString`), and strict status/mode invariant enforcement (`CONFIRMED + TRANSACTION` with signature; `SIMULATED + SIMULATION`, `REJECTED + PRECHECK`, `FAILED + PRECHECK|SIMULATION|TRANSACTION`). Returned defensive deep copies from `ReceiptStore.getReceipts()` (`JSON.parse(JSON.stringify(...))`).
+   - **Follow-up Finding 3**: Added stage-aware execution tracking (`currentStage = "PRECHECK" | "SIMULATION" | "TRANSACTION"`) in `SolanaValidator.validateProofOnChain` so error receipts accurately reflect the exact failed execution stage (`FAILED + TRANSACTION` on `.rpc()` failure).
+   - **Follow-up Finding 4**: Derived `networkStr` and `programIdStr` directly from `appConfig.network` and `appConfig.programId` in `src/config`. Generated Explorer URLs dynamically matching the active cluster (`mainnet-beta` or `devnet`).
 2. [`src/agent/risk.ts`](../../../src/agent/risk.ts):
-   - **Finding 1**: Stored `pendingVerificationExpectedStats` on `market`. Updated `registerVerificationSuccess` to require ALL expected keys/values in `provedStats` before clearing pending state or transitioning. Removed fallback to unproved stream scores during final settlement; both key `1` and key `2` must be present.
-   - **Finding 3**: Removed `receiptStore.addReceipt` from local `TEST_MODE` shortcut branch to avoid fabricating fake `SIMULATED` public receipts.
-3. [`src/agent/market.ts`](../../../src/agent/market.ts):
-   - Added `pendingVerificationExpectedStats?: Array<{ key: number; value: number }>` to `VirtualMarket` interface.
-4. [`src/server/index.ts`](../../../src/server/index.ts):
-   - **Finding 8**: Updated `GET /api/receipts` query filter validation so supplied empty strings `""` or invalid inputs return `400 Bad Request`.
-5. [`dashboard/src/app/page.tsx`](../../../dashboard/src/app/page.tsx):
-   - **Finding 8**: Added Proof Timestamp display, rendered network dynamically, and enforced strict status + signature + explorerUrl check before rendering Solana Explorer links.
-6. [`scripts/validate_historical.ts`](../../../scripts/validate_historical.ts):
-   - **Finding 4**: Updated to select only score records with a finite, non-negative source value for stat key `1`. Removed fabricated historical fallbacks (`18175981`/`991`/`0`); exits with actionable message if no record is found.
-7. [`scripts/test_all.ts`](../../../scripts/test_all.ts):
-   - **Finding 9**: Added `testTask002AdversarialFindings()` containing direct, rigorous regression tests for all 9 review findings.
+   - **Follow-up Finding 1**: Updated `registerVerificationSuccess` to enforce **EXACT ORDERED MATCHING** between `provedStats` and `market.pendingVerificationExpectedStats` (matching length, keys, order, and values). Final settlement uses index `0` for key `1` and index `1` for key `2`, with zero fallback to unproved stream scores.
+   - **Follow-up Finding 3**: Removed `receiptStore.addReceipt` call from `TEST_MODE` branch.
+3. [`scripts/test_all.ts`](../../../scripts/test_all.ts):
+   - **Follow-up Finding 5**: Restored all 6 original test functions (`testFixtureNormalization`, `testScoreNormalization`, `testOddsNormalization`, `testLogRedaction`, `testStateTransitions`, `testRiskAgentRacePaths`), added `testTask002OriginalTenRequirements()`, and added `testTask002FollowUpReReviewRegressions()`.
 
 ---
 
-## Solutions to Bounded Review Findings
+## Solutions to Follow-Up Re-review Findings (`503bfad`)
 
-1. **Finding 1 (Incomplete Proved Stats)**: `registerVerificationSuccess` compares `provedStats` against `pendingVerificationExpectedStats`. If any key or value is missing or mismatched, or if finalisation is missing key `1` or `2`, the market stays in `FINAL_PROOF_PENDING` / `HALTED` without clearing pending state or settling.
-2. **Finding 2 (Receipt Sanitization & Invariants)**: Field allowlist copies only standard receipt fields. Secret headers (`X-Api-Token`), bearer tokens, file paths (`walletPath`), and raw proof node arrays (`subTreeProof`) are stripped. Contradictory receipts (e.g. `CONFIRMED` without signature) are rejected.
-3. **Finding 3 (TEST_MODE Fake Receipts)**: `TEST_MODE` state-machine simulation callback remains active for tests, but `receiptStore.addReceipt` was removed from the shortcut branch.
-4. **Finding 4 (Historical Helper Fallback)**: `validate_historical.ts` validates stat 1 value and exits with code 1 if no valid devnet score record is found, avoiding fabricated fallbacks.
-5. **Finding 5 (Unsupported Keys & Request Params)**: `validateExpectedStatsPrecheck` accepts ONLY keys `1` and `2`. `validateProofRequestParams` checks `fixtureId` and `seq` as positive integers before making HTTP requests.
-6. **Finding 6 (Non-Coercive Identity Checks)**: `validateProofIdentity` checks `typeof val === "number" && Number.isFinite(val)` strictly, rejecting string `minTimestamp` or boolean `false`.
-7. **Finding 7 (Post-Fetch Error Handling)**: Post-fetch execution is wrapped in `try/catch`, ensuring one sanitized `FAILED` receipt is recorded on error.
-8. **Finding 8 (API & Dashboard Contract)**: `GET /api/receipts?fixtureId=` returns `400 Bad Request` on empty or invalid filter. Dashboard renders Proof Timestamp, uses active receipt network, and checks `activeReceipt.status === "CONFIRMED" && activeReceipt.signature && activeReceipt.explorerUrl`.
-9. **Finding 9 (Adversarial Regression Test Suite)**: Direct regression tests added to `scripts/test_all.ts`.
+1. **Follow-up Finding 1 (Exact Ordered Proved-Stat Binding)**:
+   - `registerVerificationSuccess` verifies `provedStats` against `pendingVerificationExpectedStats` by exact length, index, key, and value. Conflicting extra stats (`[{ key: 1, val: 3 }, { key: 2, val: 1 }, { key: 2, val: 99 }]`) or misordered stats return immediately without clearing pending state or settling. Final settlement uses index 0 (key 1) and index 1 (key 2) strictly.
+2. **Follow-up Finding 2 (Defensive Store Copies & Controlled Sanitization)**:
+   - `ReceiptStore.getReceipts()` returns defensive deep copies (`JSON.parse(JSON.stringify(result))`). Store drops malformed non-numeric `fixtureId` (e.g. `"not-a-number"`). `sanitizeReasonString` maps raw exceptions to controlled public error codes (`"Proof response identity check failed"`, `"TxLINE proof request failed"`, etc.).
+3. **Follow-up Finding 3 (Status/Mode Invariants & Stage Labeling)**:
+   - Invariant enforcement drops contradictory status/mode inputs (e.g. `SIMULATED + PRECHECK`, `SIMULATED + TRANSACTION`, `REJECTED + SIMULATION`, `CONFIRMED` without signature). Post-fetch pipeline tracks `currentStage` (`"PRECHECK"` -> `"SIMULATION"` -> `"TRANSACTION"`) so error receipts accurately preserve mode (e.g. `FAILED + TRANSACTION` on `.rpc()` failure).
+4. **Follow-up Finding 4 (Active Network Metadata)**:
+   - Receipts and Explorer URLs derive network metadata directly from `appConfig.network` in `src/config`.
+5. **Follow-up Finding 5 (Restored Original + Adversarial Coverage)**:
+   - All 6 original baseline test functions + original 10 Task 002 acceptance tests + 6 follow-up regression test suites restored and passing cleanly in `scripts/test_all.ts`.
 
 ---
 
@@ -50,12 +42,12 @@
 
 | Verification Command | Exit Code | Result |
 |---|---|---|
-| `yarn test` | `0` | **PASSED** — All unit, race, and Task 002 adversarial tests passed |
+| `yarn test` | `0` | **PASSED** — All 6 baseline + 10 Task 002 + 6 follow-up regression tests passed |
 | `yarn typecheck` | `0` | **PASSED** — Root TypeScript typecheck clean |
 | `yarn ts-node scripts/test_agent.ts` | `0` | **PASSED** — State machine test executed in `TEST_MODE` |
-| `git diff --check` | `0` | **PASSED** — No whitespace or formatting issues |
-| `git status --short` | `0` | **PASSED** — Expected modified files present |
-| `cd dashboard && yarn lint` | `0` | **PASSED** — ESLint passed with 0 errors/warnings |
+| `git diff --check` | `0` | **PASSED** — Clean diff with 0 formatting issues |
+| `git status --short` | `0` | **PASSED** — Worktree clean |
+| `cd dashboard && yarn lint` | `0` | **PASSED** — Next.js ESLint passed with 0 errors |
 | `cd dashboard && yarn build` | `0` | **PASSED** — Next.js 16 production build succeeded |
 
 ---

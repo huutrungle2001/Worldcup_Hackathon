@@ -181,7 +181,7 @@ export class RiskAgent {
 
     const market = marketManager.getOrCreateMarket(fixtureId);
 
-    // 1. Bind proof completion to its exact pending transition (Finding 2)
+    // 1. Bind proof completion to its exact pending transition
     if (market.pendingVerificationSeq !== seq) {
       logger.warn(
         `Received verification success for seq ${seq}, but market for fixture ${fixtureId} is expecting seq ${market.pendingVerificationSeq}. Ignoring.`
@@ -189,15 +189,22 @@ export class RiskAgent {
       return;
     }
 
-    // 2. Finding 1: Ensure proved stats contain ALL expected pending keys and matching values
+    // 2. Follow-up Finding 1: Enforce EXACT ordered matching with pending expected stats
     if (market.pendingVerificationExpectedStats) {
-      for (const expected of market.pendingVerificationExpectedStats) {
-        const matched = provedStats.find(
-          (p) => p.key === expected.key && p.value === expected.value
+      const expected = market.pendingVerificationExpectedStats;
+      if (provedStats.length !== expected.length) {
+        logger.warn(
+          `Received verification success for seq ${seq}, but provedStats length (${provedStats.length}) does not match expected length (${expected.length}). Ignoring.`
         );
-        if (!matched) {
+        return;
+      }
+      for (let i = 0; i < expected.length; i++) {
+        if (
+          provedStats[i].key !== expected[i].key ||
+          provedStats[i].value !== expected[i].value
+        ) {
           logger.warn(
-            `Received verification success for seq ${seq}, but proved stats do not match expected key ${expected.key} (expected ${expected.value}). Ignoring and keeping market pending.`
+            `Received verification success for seq ${seq}, but proved stat at index ${i} (key ${provedStats[i].key}, val ${provedStats[i].value}) does not match expected (key ${expected[i].key}, val ${expected[i].value}). Ignoring.`
           );
           return;
         }
@@ -223,19 +230,20 @@ export class RiskAgent {
         `On-chain validation succeeded for seq ${seq}. Awaiting newer repriced odds...`
       );
     } else if (verificationType === "FINAL") {
-      // Finding 1: Settle ONLY when both participant totals are fully proved. Never fall back to unproved scores.
-      const goal1Stat = provedStats.find((s) => s.key === 1);
-      const goal2Stat = provedStats.find((s) => s.key === 2);
-
-      if (!goal1Stat || !goal2Stat) {
+      // Follow-up Finding 1: Exact ordered proved stats for final settlement (index 0 = key 1, index 1 = key 2)
+      if (
+        provedStats.length !== 2 ||
+        provedStats[0].key !== 1 ||
+        provedStats[1].key !== 2
+      ) {
         logger.error(
-          `Incomplete proved stats for final settlement of fixture ${fixtureId}: key 1 or key 2 missing. Market remains pending.`
+          `Incomplete or misordered proved stats for final settlement of fixture ${fixtureId}. Market remains pending.`
         );
         return;
       }
 
-      const scoreOneProved = goal1Stat.value;
-      const scoreTwoProved = goal2Stat.value;
+      const scoreOneProved = provedStats[0].value;
+      const scoreTwoProved = provedStats[1].value;
 
       logger.info(
         `Settling market using verified scores: ${scoreOneProved}-${scoreTwoProved} (raw was ${market.scoreOne}-${market.scoreTwo})`
@@ -289,7 +297,7 @@ export class RiskAgent {
           period: 0,
         }));
         // NOTE: In TEST_MODE, we simulate the callback internally for state machine tests,
-        // but do NOT add a public receipt labeled SIMULATED (Finding 3).
+        // but do NOT add a public receipt labeled SIMULATED.
         this.registerVerificationSuccess(
           event.fixtureId,
           event.seq,
