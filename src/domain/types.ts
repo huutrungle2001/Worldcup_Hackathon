@@ -145,7 +145,9 @@ export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
     throw new Error(`Invalid or missing score timestamp: ${rawTs}`);
   }
 
-  const action = String(raw.action ?? raw.Action ?? "");
+  // Finding 2: Trim and lowercase action for consistent comparisons and stable event keys
+  const rawActionStr = String(raw.action ?? raw.Action ?? "");
+  const action = rawActionStr.trim().toLowerCase();
   const eventKey = `${fixtureId}:${seq}:${action}`;
 
   // Read score totals from Stats dictionary or direct fields
@@ -211,9 +213,44 @@ export function normalizeScoreEvent(raw: any): NormalizedScoreEvent {
 
 export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate | null {
   if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid raw odds update object");
+    return null;
   }
 
+  // Finding 4: Filter market type and market period BEFORE timestamp and fixture validation
+  const superOddsType =
+    raw.super_odds_type ?? raw.superOddsType ?? raw.SuperOddsType;
+  const marketPeriod = raw.marketPeriod ?? raw.MarketPeriod;
+
+  // Filter out non-1X2 or non-full-match period
+  if (
+    superOddsType !== undefined &&
+    superOddsType !== null &&
+    superOddsType !== ""
+  ) {
+    if (superOddsType !== "1X2_PARTICIPANT_RESULT") {
+      return null;
+    }
+  }
+  if (
+    marketPeriod !== undefined &&
+    marketPeriod !== null &&
+    marketPeriod !== ""
+  ) {
+    return null;
+  }
+
+  const priceNames = raw.PriceNames ?? raw.priceNames ?? [];
+  const outcomes = raw.outcomes;
+
+  // Finding 3: Named-price or outcome-array payloads MUST explicitly specify 1X2_PARTICIPANT_RESULT
+  if (
+    (priceNames.length > 0 || outcomes) &&
+    superOddsType !== "1X2_PARTICIPANT_RESULT"
+  ) {
+    return null;
+  }
+
+  // Now perform required fixture ID and timestamp validation for accepted 1X2 updates
   const rawFixtureId = raw.fixtureId ?? raw.FixtureId;
   const fixtureId = Number(rawFixtureId);
   if (
@@ -237,28 +274,6 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate | null {
     throw new Error(`Invalid or missing odds timestamp: ${rawTs}`);
   }
 
-  const superOddsType =
-    raw.super_odds_type ?? raw.superOddsType ?? raw.SuperOddsType;
-  const marketPeriod = raw.marketPeriod ?? raw.MarketPeriod;
-
-  // Filter market type: accept only full-match 1X2_PARTICIPANT_RESULT
-  if (
-    superOddsType !== undefined &&
-    superOddsType !== null &&
-    superOddsType !== ""
-  ) {
-    if (superOddsType !== "1X2_PARTICIPANT_RESULT") {
-      return null;
-    }
-  }
-  if (
-    marketPeriod !== undefined &&
-    marketPeriod !== null &&
-    marketPeriod !== ""
-  ) {
-    return null;
-  }
-
   const oddsType = superOddsType ?? "1X2_PARTICIPANT_RESULT";
   const seq = Number(raw.seq ?? raw.Seq ?? 0);
   const messageId = raw.MessageId ?? raw.messageId;
@@ -267,7 +282,6 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate | null {
   let oddsDraw = 0;
   let oddsTwo = 0;
 
-  const priceNames = raw.PriceNames ?? raw.priceNames ?? [];
   const prices = raw.Prices ?? raw.prices ?? [];
 
   if (priceNames.length > 0 && prices.length > 0) {
@@ -318,7 +332,7 @@ export function normalizeOddsUpdate(raw: any): NormalizedOddsUpdate | null {
     oddsTwo <= 0
   ) {
     throw new Error(
-      `Invalid, missing, zero, or negative 1X2 prices: oddsOne=${oddsOne}, oddsDraw=${oddsDraw}, oddsTwo=${oddsTwo}`
+      `Invalid, missing, zero, negative, or non-finite 1X2 prices: oddsOne=${oddsOne}, oddsDraw=${oddsDraw}, oddsTwo=${oddsTwo}`
     );
   }
 

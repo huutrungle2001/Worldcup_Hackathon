@@ -101,7 +101,9 @@ export class ReplayEngine {
               PriceNames: ["part1", "draw", "part2"],
               Prices: [1350, 4200, 8000],
             });
-            riskAgent.handleOddsUpdate(mockOdds);
+            if (mockOdds) {
+              riskAgent.handleOddsUpdate(mockOdds);
+            }
           } catch (err) {
             logger.error("Error handling synthesized odds update:", err);
           }
