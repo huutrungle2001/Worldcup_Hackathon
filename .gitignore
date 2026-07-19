@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Custom keys and wallets
+_keys/
+*.json
+!idl/txoracle.json
+!package.json
+!tsconfig.json
+
+# Next/Vite build output
+.next/
+out/
+dist/
+.vite/
+
+# TypeScript cache
+*.tsbuildinfo
