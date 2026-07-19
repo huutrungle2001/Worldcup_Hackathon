@@ -2,7 +2,7 @@ import { NormalizedScoreEvent, NormalizedOddsUpdate } from "../domain/types";
 import { marketManager, VirtualMarket } from "./market";
 import { logger } from "../utils/logger";
 import { healthMonitor } from "../utils/health";
-import { solanaValidator, ProvedStat } from "../solana/validation";
+import { solanaValidator, ProvedStat, ExpectedStat, receiptStore } from "../solana/validation";
 
 export class RiskAgent {
   private haltTriggers: Map<number, NormalizedScoreEvent> = new Map();
@@ -46,7 +46,11 @@ export class RiskAgent {
         event.eventKey,
         `Final match result finalisation observed. Score: ${event.scoreOne}-${event.scoreTwo}.`
       );
-      this.triggerOnChainValidation(event, ["1", "2"]);
+      const expectedStats: ExpectedStat[] = [
+        { key: 1, value: event.scoreOne },
+        { key: 2, value: event.scoreTwo },
+      ];
+      this.triggerOnChainValidation(event, expectedStats);
       return;
     }
 
@@ -74,18 +78,26 @@ export class RiskAgent {
         `Goal detected. Action: ${event.action}. Score changed to ${event.scoreOne}-${event.scoreTwo}.`
       );
 
-      const statKeyToVerify = event.scoreOne > oldScoreOne ? "1" : "2";
-      this.triggerOnChainValidation(event, [statKeyToVerify]);
+      const keyToVerify =
+        event.scoreOne > oldScoreOne
+          ? 1
+          : event.scoreTwo > oldScoreTwo
+          ? 2
+          : event.participantId === 2
+          ? 2
+          : 1;
+      const valueToVerify = keyToVerify === 1 ? event.scoreOne : event.scoreTwo;
+
+      const expectedStats: ExpectedStat[] = [
+        { key: keyToVerify, value: valueToVerify },
+      ];
+      this.triggerOnChainValidation(event, expectedStats);
     }
   }
 
   public handleOddsUpdate(update: NormalizedOddsUpdate) {
     // Only allow intended 1X2 market odds (Finding 5)
     if (update.oddsType !== "1X2_PARTICIPANT_RESULT") {
-      return;
-    }
-    // Reject invalid or zero prices (Finding 5)
-    if (update.oddsOne <= 0 || update.oddsDraw <= 0 || update.oddsTwo <= 0) {
       return;
     }
 
@@ -228,8 +240,9 @@ export class RiskAgent {
 
   private async triggerOnChainValidation(
     event: NormalizedScoreEvent,
-    statKeys: string[]
+    expectedStats: ExpectedStat[]
   ) {
+    const statKeys = expectedStats.map((s) => String(s.key));
     logger.info(
       `Orchestrating on-chain verification for sequence ${
         event.seq
@@ -242,11 +255,25 @@ export class RiskAgent {
         `[TEST MODE] Auto-simulating on-chain validation success in 4 seconds.`
       );
       setTimeout(() => {
-        const mockProvedStats: ProvedStat[] = statKeys.map((key) => ({
-          key: Number(key),
-          value: Number(key === "1" ? event.scoreOne : event.scoreTwo),
+        const mockProvedStats: ProvedStat[] = expectedStats.map((s) => ({
+          key: s.key,
+          value: s.value,
           period: 0,
         }));
+        receiptStore.addReceipt({
+          id: `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          fixtureId: event.fixtureId,
+          seq: event.seq,
+          expectedStats,
+          provedStats: mockProvedStats,
+          proofTimestamp: event.ts,
+          pda: solanaValidator.deriveDailyScoresPda(event.ts).toBase58(),
+          programId: "TxOracle111111111111111111111111111111111111",
+          network: "devnet",
+          status: "SIMULATED",
+          mode: "SIMULATION",
+          validatedAt: new Date().toISOString(),
+        });
         this.registerVerificationSuccess(
           event.fixtureId,
           event.seq,
@@ -260,7 +287,7 @@ export class RiskAgent {
       const result = await solanaValidator.validateProofOnChain(
         event.fixtureId,
         event.seq,
-        statKeys,
+        expectedStats,
         true
       );
       if (result.success) {

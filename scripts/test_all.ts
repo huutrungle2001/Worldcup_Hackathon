@@ -9,6 +9,13 @@ import { Logger } from "../src/utils/logger";
 import { marketManager } from "../src/agent/market";
 import { RiskAgent } from "../src/agent/risk";
 import { logger } from "../src/utils/logger";
+import {
+  buildV2Strategy,
+  validateProofIdentity,
+  validateExpectedStatsPrecheck,
+  receiptStore,
+  ExpectedStat,
+} from "../src/solana/validation";
 
 /**
  * Robust assertion helper for functions expected to throw an error.
@@ -565,6 +572,217 @@ function testRiskAgentRacePaths() {
   logger.info("✓ RiskAgent race path and verification binding tests passed.");
 }
 
+function testTask002ProofBindingAndReceipts() {
+  logger.info("Running Task 002 proof binding & sanitized receipts tests...");
+
+  // 1. One expected stat creates one single equality predicate with its expected value
+  const strat1 = buildV2Strategy([{ key: 1, value: 3 }]);
+  if (
+    strat1.discretePredicates.length !== 1 ||
+    strat1.discretePredicates[0].single.index !== 0 ||
+    strat1.discretePredicates[0].single.predicate.threshold !== 3
+  ) {
+    throw new Error("Single stat strategy predicate construction failed");
+  }
+
+  // 2. Two final stats create two single equality predicates at indexes 0 and 1
+  const strat2 = buildV2Strategy([
+    { key: 1, value: 2 },
+    { key: 2, value: 1 },
+  ]);
+  if (
+    strat2.discretePredicates.length !== 2 ||
+    strat2.discretePredicates[0].single.index !== 0 ||
+    strat2.discretePredicates[0].single.predicate.threshold !== 2 ||
+    strat2.discretePredicates[1].single.index !== 1 ||
+    strat2.discretePredicates[1].single.predicate.threshold !== 1
+  ) {
+    throw new Error("Two-stat strategy predicate construction failed");
+  }
+
+  // 3. Wrong proof fixture ID is rejected
+  const expStats: ExpectedStat[] = [{ key: 1, value: 1 }];
+  const wrongFixtureResp = {
+    summary: { fixtureId: 999, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 1 }],
+    statProofs: [[]],
+  };
+  const checkWrongId = validateProofIdentity(
+    123,
+    10,
+    expStats,
+    wrongFixtureResp
+  );
+  if (
+    checkWrongId.valid ||
+    !checkWrongId.reason?.includes("Fixture ID mismatch")
+  ) {
+    throw new Error("Failed to reject wrong fixture ID in proof response");
+  }
+
+  // 4. Missing, extra, reordered, duplicate, or wrong returned stat keys are rejected
+  const wrongKeyResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 2, value: 1 }],
+    statProofs: [[]],
+  };
+  const checkWrongKey = validateProofIdentity(123, 10, expStats, wrongKeyResp);
+  if (
+    checkWrongKey.valid ||
+    !checkWrongKey.reason?.includes("Stat key mismatch")
+  ) {
+    throw new Error("Failed to reject wrong stat key in proof response");
+  }
+
+  // 5. Returned stat value different from triggering value is rejected
+  const wrongValResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 5 }],
+    statProofs: [[]],
+  };
+  const checkWrongVal = validateProofIdentity(123, 10, expStats, wrongValResp);
+  if (
+    checkWrongVal.valid ||
+    !checkWrongVal.reason?.includes("Stat value mismatch")
+  ) {
+    throw new Error("Failed to reject wrong stat value in proof response");
+  }
+
+  // 6. Missing corresponding stat proof is rejected
+  const missingProofResp = {
+    summary: { fixtureId: 123, updateStats: { minTimestamp: 1000 } },
+    statsToProve: [{ key: 1, value: 1 }],
+    statProofs: [],
+  };
+  const checkMissingProof = validateProofIdentity(
+    123,
+    10,
+    expStats,
+    missingProofResp
+  );
+  if (
+    checkMissingProof.valid ||
+    !checkMissingProof.reason?.includes("Stat proof count mismatch")
+  ) {
+    throw new Error("Failed to reject missing stat proof in response");
+  }
+
+  // 7. Invalid expected values or keys fail before any external operation
+  const invalidKeyPrecheck = validateExpectedStatsPrecheck([
+    { key: -1, value: 1 },
+  ]);
+  if (invalidKeyPrecheck.valid)
+    throw new Error("Should reject negative key in precheck");
+
+  const invalidValPrecheck = validateExpectedStatsPrecheck([
+    { key: 1, value: -2 },
+  ]);
+  if (invalidValPrecheck.valid)
+    throw new Error("Should reject negative value in precheck");
+
+  const dupKeyPrecheck = validateExpectedStatsPrecheck([
+    { key: 1, value: 1 },
+    { key: 1, value: 2 },
+  ]);
+  if (dupKeyPrecheck.valid)
+    throw new Error("Should reject duplicate key in precheck");
+
+  // 8. Simulated and confirmed receipt shapes are labeled distinctly, simulated receipt has no explorer link
+  receiptStore.clear();
+  receiptStore.addReceipt({
+    id: "rcpt_sim_1",
+    fixtureId: 123,
+    seq: 1,
+    expectedStats: [{ key: 1, value: 1 }],
+    provedStats: [{ key: 1, value: 1, period: 0 }],
+    proofTimestamp: 1000,
+    programId: "Prog1",
+    network: "devnet",
+    status: "SIMULATED",
+    mode: "SIMULATION",
+    validatedAt: new Date().toISOString(),
+  });
+
+  receiptStore.addReceipt({
+    id: "rcpt_conf_1",
+    fixtureId: 123,
+    seq: 2,
+    expectedStats: [{ key: 1, value: 2 }],
+    provedStats: [{ key: 1, value: 2, period: 0 }],
+    proofTimestamp: 2000,
+    programId: "Prog1",
+    network: "devnet",
+    status: "CONFIRMED",
+    mode: "TRANSACTION",
+    signature: "sig_abc_123",
+    explorerUrl: "https://explorer.solana.com/tx/sig_abc_123?cluster=devnet",
+    validatedAt: new Date().toISOString(),
+  });
+
+  const allReceipts = receiptStore.getReceipts();
+  const simReceipt = allReceipts.find((r) => r.status === "SIMULATED");
+  const confReceipt = allReceipts.find((r) => r.status === "CONFIRMED");
+
+  if (!simReceipt || simReceipt.explorerUrl || simReceipt.signature) {
+    throw new Error(
+      "Simulated receipt must not have signature or explorer link"
+    );
+  }
+
+  if (!confReceipt || !confReceipt.explorerUrl || !confReceipt.signature) {
+    throw new Error("Confirmed receipt must have signature and explorer link");
+  }
+
+  // 9. Receipt history is bounded (max 50) and fixture filtering returns only matches
+  receiptStore.clear();
+  for (let i = 1; i <= 60; i++) {
+    receiptStore.addReceipt({
+      id: `rcpt_${i}`,
+      fixtureId: i % 2 === 0 ? 200 : 300,
+      seq: i,
+      expectedStats: [{ key: 1, value: 1 }],
+      provedStats: [{ key: 1, value: 1, period: 0 }],
+      proofTimestamp: 1000,
+      programId: "Prog1",
+      network: "devnet",
+      status: "SIMULATED",
+      mode: "SIMULATION",
+      validatedAt: new Date().toISOString(),
+    });
+  }
+
+  const storeCount = receiptStore.getReceipts().length;
+  if (storeCount !== 50) {
+    throw new Error(`Expected receipt store max 50 items, got ${storeCount}`);
+  }
+
+  const filtered200 = receiptStore.getReceipts(200);
+  if (filtered200.some((r) => r.fixtureId !== 200)) {
+    throw new Error("Fixture filtering returned non-matching fixture IDs");
+  }
+
+  // 10. Receipt serialization contains no secrets or raw proof nodes
+  const serialized = JSON.stringify(receiptStore.getReceipts());
+  const forbiddenKeywords = [
+    "jwt",
+    "token",
+    "secret",
+    "walletPath",
+    "subTreeProof",
+    "mainTreeProof",
+    "eventStatRoot",
+  ];
+  for (const keyword of forbiddenKeywords) {
+    if (serialized.includes(`"${keyword}"`)) {
+      throw new Error(
+        `Receipt serialization contained forbidden keyword: ${keyword}`
+      );
+    }
+  }
+
+  logger.info("✓ Task 002 proof binding & sanitized receipts tests passed.");
+}
+
 function runAll() {
   logger.info("=== Starting Unit & Race Tests ===");
   testFixtureNormalization();
@@ -573,6 +791,7 @@ function runAll() {
   testLogRedaction();
   testStateTransitions();
   testRiskAgentRacePaths();
+  testTask002ProofBindingAndReceipts();
   logger.info("=== All Unit & Race Tests Passed Successfully ===");
 }
 

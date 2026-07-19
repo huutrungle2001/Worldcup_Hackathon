@@ -44,8 +44,35 @@ const adminAuth = (
   next();
 };
 
+import { receiptStore } from "../solana/validation";
+
 app.get("/api/health", (req, res) => {
   res.json(healthMonitor.getHealth());
+});
+
+app.get("/api/receipts", (req, res) => {
+  const rawFixtureId = req.query.fixtureId;
+  let fixtureId: number | undefined;
+
+  if (
+    rawFixtureId !== undefined &&
+    rawFixtureId !== null &&
+    rawFixtureId !== ""
+  ) {
+    fixtureId = Number(rawFixtureId);
+    if (
+      !Number.isFinite(fixtureId) ||
+      fixtureId <= 0 ||
+      !Number.isInteger(fixtureId)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Invalid fixtureId filter. Must be a positive integer." });
+    }
+  }
+
+  const receipts = receiptStore.getReceipts(fixtureId);
+  res.json(receipts);
 });
 
 app.get("/api/markets", (req, res) => {

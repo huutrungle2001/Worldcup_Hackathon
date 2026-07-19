@@ -45,9 +45,39 @@ interface VirtualMarket {
   auditTrail: AuditEvent[];
 }
 
+interface ExpectedStat {
+  key: number;
+  value: number;
+}
+
+interface ProvedStat {
+  key: number;
+  value: number;
+  period: number;
+}
+
+interface SanitizedReceipt {
+  id: string;
+  fixtureId: number;
+  seq: number;
+  expectedStats: ExpectedStat[];
+  provedStats: ProvedStat[];
+  proofTimestamp: number;
+  pda?: string;
+  programId: string;
+  network: string;
+  status: "CONFIRMED" | "SIMULATED" | "REJECTED" | "FAILED";
+  mode: "TRANSACTION" | "SIMULATION" | "PRECHECK";
+  signature?: string;
+  explorerUrl?: string;
+  reason?: string;
+  validatedAt: string;
+}
+
 export default function Dashboard() {
   const [health, setHealth] = useState<AppHealth | null>(null);
   const [markets, setMarkets] = useState<VirtualMarket[]>([]);
+  const [receipts, setReceipts] = useState<SanitizedReceipt[]>([]);
   const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(
     null
   );
@@ -84,6 +114,12 @@ export default function Dashboard() {
       const marketsRes = await fetch(`${API_BASE}/api/markets`);
       const marketsData = await marketsRes.json();
       setMarkets(marketsData);
+
+      const receiptsRes = await fetch(`${API_BASE}/api/receipts`);
+      if (receiptsRes.ok) {
+        const receiptsData = await receiptsRes.json();
+        setReceipts(receiptsData);
+      }
     } catch (err) {
       console.error("Failed to connect to backend Express server:", err);
     }
@@ -576,6 +612,160 @@ export default function Dashboard() {
                 historical transition audit logs.
               </div>
             )}
+          </section>
+
+          {/* Verification Receipt Panel (Judge-Visible) */}
+          <section className="border border-slate-800/60 bg-[#0C101B]/50 backdrop-blur-md rounded-2xl p-6 flex flex-col">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center justify-between mb-4 pb-4 border-b border-slate-800/60">
+              <span className="flex items-center gap-2">
+                <svg
+                  className="w-5 h-5 text-emerald-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Solana Proof Verification Receipt
+              </span>
+            </h2>
+
+            {(() => {
+              const activeReceipt = selectedFixtureId
+                ? receipts.find((r) => r.fixtureId === selectedFixtureId) || null
+                : receipts[0] || null;
+
+              if (!activeReceipt) {
+                return (
+                  <div className="text-center text-slate-500 font-mono text-xs py-8">
+                    No verification receipts recorded yet. Run a live or replay flow to generate proof receipts.
+                  </div>
+                );
+              }
+
+              const badge = (() => {
+                switch (activeReceipt.status) {
+                  case "CONFIRMED":
+                    return {
+                      label: "Confirmed on Solana",
+                      color:
+                        "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+                    };
+                  case "SIMULATED":
+                    return {
+                      label: "Simulation passed",
+                      color:
+                        "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                    };
+                  case "REJECTED":
+                    return {
+                      label: "Proof rejected",
+                      color:
+                        "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                    };
+                  case "FAILED":
+                  default:
+                    return {
+                      label: "Validation failed",
+                      color:
+                        "bg-rose-500/20 text-rose-400 border-rose-500/30",
+                    };
+                }
+              })();
+
+              return (
+                <div className="bg-[#141A29]/60 border border-slate-800/60 rounded-xl p-4 flex flex-col gap-3 font-mono text-xs text-slate-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Result Status:</span>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${badge.color}`}
+                    >
+                      {badge.label}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Mode:</span>
+                    <span className="text-slate-200 font-bold">
+                      {activeReceipt.mode}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Fixture ID / Seq:</span>
+                    <span className="text-slate-200 font-bold">
+                      {activeReceipt.fixtureId} (seq {activeReceipt.seq})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Expected Stats:</span>
+                    <span className="text-slate-200">
+                      {activeReceipt.expectedStats
+                        .map((s) => `key ${s.key}:${s.value}`)
+                        .join(", ")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Proved Stats:</span>
+                    <span className="text-slate-200">
+                      {activeReceipt.provedStats.length > 0
+                        ? activeReceipt.provedStats
+                            .map((s) => `key ${s.key}:${s.value}`)
+                            .join(", ")
+                        : "None"}
+                    </span>
+                  </div>
+                  {activeReceipt.pda && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Roots PDA:</span>
+                      <span
+                        className="text-slate-300 truncate max-w-[180px]"
+                        title={activeReceipt.pda}
+                      >
+                        {activeReceipt.pda}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Program / Network:</span>
+                    <span className="text-slate-300 truncate max-w-[180px]">
+                      {activeReceipt.programId} ({activeReceipt.network})
+                    </span>
+                  </div>
+                  {activeReceipt.reason && (
+                    <div className="flex justify-between text-amber-400">
+                      <span>Reason:</span>
+                      <span
+                        className="truncate max-w-[220px]"
+                        title={activeReceipt.reason}
+                      >
+                        {activeReceipt.reason}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800/60">
+                    <span>
+                      Validated:{" "}
+                      {new Date(activeReceipt.validatedAt).toLocaleTimeString()}
+                    </span>
+                    {activeReceipt.status === "CONFIRMED" &&
+                      activeReceipt.explorerUrl && (
+                        <a
+                          href={activeReceipt.explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-400 underline hover:text-emerald-300 font-bold text-[11px]"
+                        >
+                          Solana Explorer ↗
+                        </a>
+                      )}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
         </div>
       </main>
