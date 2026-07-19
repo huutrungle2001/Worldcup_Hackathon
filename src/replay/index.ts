@@ -116,9 +116,19 @@ export class ReplayEngine {
     logger.info(`Starting historical replay fetch for fixture ${fixtureId} at ${speed}x...`);
 
     try {
-      const response = await txLineClient.request<any[]>({
+      let response = await txLineClient.request<any[]>({
         url: `/scores/historical/${fixtureId}`,
       });
+
+      // Fallback: If no records returned, try scores snapshot endpoint (highly useful for devnet sandboxes)
+      if (!response || !Array.isArray(response) || response.length === 0) {
+        logger.info(`No historical score records found for fixture ${fixtureId}. Trying scores snapshot...`);
+        try {
+          response = await txLineClient.getScoresSnapshot(fixtureId);
+        } catch (snapErr: any) {
+          logger.warn(`Failed to fetch scores snapshot for fixture ${fixtureId}: ${snapErr.message}`);
+        }
+      }
 
       // If user stopped or started a new replay during fetch, abort this callback
       if (this.replayGeneration !== currentGen) {
@@ -126,17 +136,24 @@ export class ReplayEngine {
       }
 
       if (!response || !Array.isArray(response) || response.length === 0) {
-        const msg = `No historical score records found for fixture ${fixtureId}.`;
+        const msg = `No historical score records or snapshot found for fixture ${fixtureId}.`;
         logger.error(msg);
         this.updateStatus("FAILED", `No historical records for fixture ${fixtureId}`, msg);
         return { success: false, status: this.getStatus(), error: msg, statusCode: 400 };
       }
 
-      this.historicalRecords = response.sort((a, b) => {
-        const seqA = a.Seq ?? a.seq ?? 0;
-        const seqB = b.Seq ?? b.seq ?? 0;
-        return seqA - seqB;
-      });
+      this.historicalRecords = response
+        .filter((item) => {
+          const seqVal = item.Seq ?? item.seq;
+          if (seqVal === undefined || seqVal === null) return false;
+          const num = Number(seqVal);
+          return Number.isInteger(num) && num > 0;
+        })
+        .sort((a, b) => {
+          const seqA = a.Seq ?? a.seq ?? 0;
+          const seqB = b.Seq ?? b.seq ?? 0;
+          return seqA - seqB;
+        });
 
       logger.info(`✓ Loaded ${this.historicalRecords.length} historical updates for replay.`);
       this.updateStatus("RUNNING", `Replaying fixture ${fixtureId} (${this.historicalRecords.length} steps)...`);
