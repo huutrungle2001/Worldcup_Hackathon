@@ -591,35 +591,53 @@ export default function Dashboard() {
 
             {/* Live Replay status sentence */}
             <div
-              className="bg-[#141A29] border border-slate-800/60 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 font-mono text-xs"
+              className="bg-[#141A29] border border-slate-800/60 rounded-xl p-4 mb-6 flex flex-col gap-4 font-mono text-xs"
               aria-live="polite"
             >
-              <div className="flex flex-col gap-1">
-                <span className="text-slate-400 uppercase tracking-wider text-[10px]">Replay Engine Status</span>
-                <span className="text-slate-200 font-bold text-sm">
-                  {replayStatus ? replayStatus.message : "Not Connected"}
-                </span>
-                {replayStatus?.error && (
-                  <span className="text-rose-400 text-xs mt-1" role="alert">
-                    Error: {replayStatus.error}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-400 uppercase tracking-wider text-[10px]">Replay Engine Status</span>
+                  <span className="text-slate-200 font-bold text-sm">
+                    {replayStatus ? replayStatus.message : "Not Connected"}
                   </span>
+                  {replayStatus?.error && (
+                    <span className="text-rose-400 text-xs mt-1" role="alert">
+                      Error: {replayStatus.error}
+                    </span>
+                  )}
+                </div>
+                {replayStatus && (
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
+                      State: <strong className="text-indigo-400">{replayStatus.state}</strong>
+                    </div>
+                    {replayStatus.activeFixtureId && (
+                      <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
+                        Fixture: <strong className="text-slate-200">{replayStatus.activeFixtureId}</strong>
+                      </div>
+                    )}
+                    {replayStatus.totalSteps > 0 && (
+                      <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
+                        Progress: <strong className="text-slate-200">{replayStatus.currentStep} / {replayStatus.totalSteps}</strong>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              {replayStatus && (
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
-                    State: <strong className="text-indigo-400">{replayStatus.state}</strong>
+
+              {/* Visual Progress Bar */}
+              {replayStatus && replayStatus.totalSteps > 0 && (
+                <div className="w-full flex flex-col gap-1.5 border-t border-slate-800/60 pt-3">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Replay Progression</span>
+                    <span>{Math.round((replayStatus.currentStep / replayStatus.totalSteps) * 100)}%</span>
                   </div>
-                  {replayStatus.activeFixtureId && (
-                    <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
-                      Fixture: <strong className="text-slate-200">{replayStatus.activeFixtureId}</strong>
-                    </div>
-                  )}
-                  {replayStatus.totalSteps > 0 && (
-                    <div className="px-2.5 py-1 rounded bg-[#0A0E17] border border-slate-800 text-slate-300">
-                      Progress: <strong className="text-slate-200">{replayStatus.currentStep} / {replayStatus.totalSteps}</strong>
-                    </div>
-                  )}
+                  <div className="w-full bg-[#0A0E17] h-2.5 rounded-full overflow-hidden border border-slate-800/60">
+                    <div
+                      className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-300 ease-out shadow-sm shadow-indigo-500/20"
+                      style={{ width: `${(replayStatus.currentStep / replayStatus.totalSteps) * 100}%` }}
+                    />
+                  </div>
                 </div>
               )}
             </div>
