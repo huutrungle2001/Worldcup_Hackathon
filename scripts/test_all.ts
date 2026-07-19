@@ -119,7 +119,7 @@ function testScoreNormalization() {
   if (norm.statusId !== 2) throw new Error("StatusId mismatch");
   if (norm.eventKey !== "123:10:goal") throw new Error("EventKey mismatch");
 
-  // Finding 2: Action canonicalization (trimmed & lowercased) and stable event key
+  // Action canonicalization (trimmed & lowercased) and stable event key
   const rawPaddedAction = {
     FixtureId: 123,
     Seq: 10,
@@ -139,7 +139,7 @@ function testScoreNormalization() {
     );
   }
 
-  // Finding 5: Preserved string GameState
+  // Preserved string GameState
   const normStrState = normalizeScoreEvent({
     FixtureId: 123,
     Seq: 1,
@@ -168,7 +168,7 @@ function testScoreNormalization() {
     );
   }
 
-  // 4. Finding 5: Missing as well as zero score sequence rejected
+  // 4. Missing as well as zero score sequence rejected
   expectThrow(
     () => normalizeScoreEvent({ FixtureId: 123, Ts: 10000 }),
     "sequence"
@@ -178,7 +178,7 @@ function testScoreNormalization() {
     "sequence"
   );
 
-  // 5. Finding 5: Missing score timestamp rejected
+  // 5. Missing score timestamp rejected
   expectThrow(
     () => normalizeScoreEvent({ FixtureId: 123, Seq: 5 }),
     "timestamp"
@@ -260,7 +260,7 @@ function testOddsNormalization() {
     throw new Error("Extra-time market should return null");
   }
 
-  // Finding 3: Untyped named-price payload (missing SuperOddsType) must return null
+  // Untyped named-price payload (missing SuperOddsType) must return null
   const rawUntypedNamed = {
     FixtureId: 123,
     Ts: 1790348501000,
@@ -271,7 +271,7 @@ function testOddsNormalization() {
     throw new Error("Untyped named-price payload must return null");
   }
 
-  // Finding 4: Unrelated market without Ts returns null instead of throwing an exception
+  // Unrelated market without Ts returns null instead of throwing an exception
   const rawUnrelatedNoTs = {
     FixtureId: 123,
     SuperOddsType: "HANDICAP",
@@ -280,7 +280,19 @@ function testOddsNormalization() {
     throw new Error("Unrelated market without timestamp should return null");
   }
 
-  // 10. Finding 5: Missing, zero, negative, NaN, and infinite 1X2 prices are rejected
+  // 10. Missing, zero, negative, NaN, and infinite 1X2 prices are rejected
+  expectThrow(
+    () =>
+      normalizeOddsUpdate({
+        FixtureId: 123,
+        Ts: 1790348501000,
+        SuperOddsType: "1X2_PARTICIPANT_RESULT",
+        PriceNames: ["part1", "draw", "part2"],
+        Prices: [2000, 3000], // Missing one required price value
+      }),
+    "prices"
+  );
+
   expectThrow(
     () =>
       normalizeOddsUpdate({
@@ -408,6 +420,7 @@ function testRiskAgentRacePaths() {
   m.oddsDraw = 3000;
   m.oddsTwo = 5000;
 
+  // 1. Goal Event - Halts market
   const goalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 10,
@@ -424,6 +437,7 @@ function testRiskAgentRacePaths() {
     throw new Error("Halt sequence and type not bound correctly");
   }
 
+  // 2. Finding 6: Normal post-goal event (e.g. card) advances lastScoreSeq but does not break reopening
   const cardEvent = normalizeScoreEvent({
     fixtureId,
     seq: 11,
@@ -442,6 +456,7 @@ function testRiskAgentRacePaths() {
     );
   }
 
+  // 3. Finding 5: Unrelated odds are ignored
   const extraOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 12,
@@ -457,6 +472,7 @@ function testRiskAgentRacePaths() {
     throw new Error("Market reopened by unrelated odds type");
   }
 
+  // 4. Verify original goal proof success
   const goalProvedStats = [{ key: 1, value: 1, period: 0 }];
   riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
 
@@ -464,6 +480,7 @@ function testRiskAgentRacePaths() {
     throw new Error(`Expected PROOF_PENDING state, got ${m.state}`);
   }
 
+  // 5. Finding 5: Stale odds (Odds TS <= Goal TS) do not reopen
   const staleOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 13,
@@ -477,6 +494,7 @@ function testRiskAgentRacePaths() {
     throw new Error("Market reopened by stale odds");
   }
 
+  // 6. Fresh odds (Odds TS > Goal TS) reopens market
   const freshOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 14,
@@ -490,6 +508,7 @@ function testRiskAgentRacePaths() {
     throw new Error(`Expected market to reopen, got state: ${m.state}`);
   }
 
+  // 7. Finalisation Event - Transitions to FINAL_PROOF_PENDING
   const finalEvent = normalizeScoreEvent({
     fixtureId,
     seq: 20,
@@ -511,11 +530,14 @@ function testRiskAgentRacePaths() {
     throw new Error("Finalisation sequence/type not bound correctly");
   }
 
+  // 8. Finding 2: Delayed old goal proof (seq 10) completing after finalisation began does not settle the market
   riskAgent.registerVerificationSuccess(fixtureId, 10, goalProvedStats);
   if (m.state !== "FINAL_PROOF_PENDING") {
     throw new Error("Delayed old proof settled the final market");
   }
 
+  // 9. Finding 3: Settle the market using proved goals (total goals 2-1), verifying winner calculation
+  // Let's modify the raw stream scores to be tampered (e.g. 0-0) to prove it uses verified stats!
   m.scoreOne = 0;
   m.scoreTwo = 0;
 

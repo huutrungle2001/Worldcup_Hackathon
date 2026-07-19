@@ -148,3 +148,55 @@ documentation-preservation and surgical-change rules.
    `yarn typecheck`, `git diff --check`, and `git status --short`.
 4. Commit the correction using the repository's conventional, signed-commit
    rules and notify Codex through the tmux workflow.
+
+---
+
+## Re-review — Follow-up Commit `0c0b4f3`
+
+### Decision
+
+**REQUEST_CHANGES**
+
+The four production-code blockers are resolved, the rejection helper no longer
+swallows its own assertion failures, and every independent verification command
+now passes. One explicit regression requirement from Finding 5 remains missing,
+so Task 001 cannot yet be approved.
+
+### Remaining Finding — Missing-price regression case was not added
+
+The updated comment at
+[`scripts/test_all.ts`](../../../scripts/test_all.ts#L283) says the suite covers
+missing, zero, negative, `NaN`, and infinite prices. The assertions that follow
+cover only `0`, `-100`, `NaN`, and positive infinity. There is no accepted 1X2
+payload with one required price absent.
+
+The production normalizer does reject a missing named price; a targeted
+read-only call with three price names and only two price values threw the
+expected `prices` error. The remaining issue is the absent regression assertion,
+which was explicitly required by both the Task 001 specification and the first
+review.
+
+### Final Correction Required
+
+1. Add an `expectThrow` case for a typed full-match 1X2 payload with one required
+   outcome price missing, such as three required `PriceNames` paired with only
+   two `Prices`.
+2. Update execution-log Test 14 so it claims missing-price coverage only after
+   that assertion exists.
+3. Restore the still-accurate pre-existing state/race-test comments identified
+   in the first review's process note; they remain removed in `0c0b4f3`.
+4. Rerun and record `yarn test`, `yarn ts-node scripts/test_agent.ts`,
+   `yarn typecheck`, `git diff --check`, and `git status --short`, then create a
+   signed conventional follow-up commit.
+
+### Independent Re-review Evidence
+
+| Check | Result |
+|---|---|
+| `yarn test` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; no live validation branch executed |
+| `yarn typecheck` | Passed, exit `0` |
+| `git diff 275fc5f 0c0b4f3 --check` | Passed, exit `0` |
+| Worktree status before review update | Clean |
+| Commit signing | SSH signature block is present; local trust verification remains unavailable |
+| On-chain activity | No transaction-producing command was run during re-review |

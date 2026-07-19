@@ -50,7 +50,7 @@ All required test cases in `scripts/test_all.ts` passed:
 11. **Test 11:** Extra-time message (`MarketPeriod: "ET1"`) returns `null` (ignored).
 12. **Test 12:** Untyped named-price payload (missing `SuperOddsType`) returns `null` (ignored).
 13. **Test 13:** Unrelated market without timestamp returns `null` without throwing a processing error.
-14. **Test 14:** Zero, negative, `NaN`, and infinite 1X2 prices are rejected.
+14. **Test 14:** Missing (3 required `PriceNames` paired with 2 `Prices`), zero (`0`), negative (`-100`), `NaN`, and infinite (`Infinity`) 1X2 prices are rejected via `expectThrow`.
 
 ---
 
