@@ -30,7 +30,9 @@ function expectThrow(fn: () => void, expectedKeyword: string) {
       `Assertion failed: Expected function to throw an error containing "${expectedKeyword}", but it executed without throwing.`
     );
   }
-  if (!caughtError.toLowerCase().includes(expectedKeyword.toLowerCase())) {
+  if (
+    !caughtError.toLowerCase().includes(expectedKeyword.toLowerCase())
+  ) {
     throw new Error(
       `Assertion failed: Expected error message to contain "${expectedKeyword}", but got: "${caughtError}"`
     );
@@ -77,11 +79,7 @@ function testFixtureNormalization() {
   // Missing or invalid StartTime throws error
   expectThrow(
     () =>
-      normalizeFixture({
-        FixtureId: 123,
-        Participant1: "A",
-        Participant2: "B",
-      }),
+      normalizeFixture({ FixtureId: 123, Participant1: "A", Participant2: "B" }),
     "StartTime"
   );
 
@@ -350,6 +348,7 @@ function testLogRedaction() {
   const testLogger = new Logger();
   let output = "";
 
+  // Temporarily redirect console.log to inspect output
   const originalLog = console.log;
   console.log = (msg: string) => {
     output = msg;
@@ -386,15 +385,18 @@ function testStateTransitions() {
   const fixtureId = 555;
   const market = marketManager.getOrCreateMarket(fixtureId);
 
+  // Initial OPEN
   if ((market.state as string) !== "OPEN") {
     throw new Error(`Expected OPEN state, got ${market.state}`);
   }
 
+  // Transition to HALTED
   marketManager.transitionTo(market, "HALTED", "TEST_HALT");
   if ((market.state as string) !== "HALTED" || !market.haltedAt) {
     throw new Error(`Expected HALTED state, got ${market.state}`);
   }
 
+  // Idempotent transition check (should return false and not add new audit logs)
   const lenBefore = market.auditTrail.length;
   const result = marketManager.transitionTo(market, "HALTED", "TEST_HALT");
   if (result || market.auditTrail.length !== lenBefore) {
@@ -407,6 +409,7 @@ function testStateTransitions() {
 function testRiskAgentRacePaths() {
   logger.info("Running RiskAgent race path and verification binding tests...");
 
+  // Reset/clean market
   const fixtureId = 999;
   const riskAgent = new RiskAgent();
   const market = marketManager.getOrCreateMarket(fixtureId);
@@ -433,7 +436,10 @@ function testRiskAgentRacePaths() {
   if (m.state !== "HALTED") {
     throw new Error(`Expected state HALTED, got ${m.state}`);
   }
-  if (m.pendingVerificationSeq !== 10 || m.pendingVerificationType !== "GOAL") {
+  if (
+    m.pendingVerificationSeq !== 10 ||
+    m.pendingVerificationType !== "GOAL"
+  ) {
     throw new Error("Halt sequence and type not bound correctly");
   }
 
@@ -484,7 +490,7 @@ function testRiskAgentRacePaths() {
   const staleOdds = normalizeOddsUpdate({
     fixtureId,
     seq: 13,
-    ts: 100000,
+    ts: 100000, // Equal to goal event TS
     super_odds_type: "1X2_PARTICIPANT_RESULT",
     PriceNames: ["part1", "draw", "part2"],
     Prices: [1400, 3200, 6000],
@@ -516,7 +522,7 @@ function testRiskAgentRacePaths() {
     action: "game_finalised",
     statusId: 100,
     period: 100,
-    stats: { "1": 2, "2": 1 },
+    stats: { "1": 2, "2": 1 }, // Final Score 2-1
   });
   riskAgent.handleScoreEvent(finalEvent);
 

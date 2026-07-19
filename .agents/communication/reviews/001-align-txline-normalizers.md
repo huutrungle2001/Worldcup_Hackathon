@@ -200,3 +200,52 @@ review.
 | Worktree status before review update | Clean |
 | Commit signing | SSH signature block is present; local trust verification remains unavailable |
 | On-chain activity | No transaction-producing command was run during re-review |
+
+---
+
+## Final Re-review — Follow-up Commit `45cf8f4`
+
+### Decision
+
+**REQUEST_CHANGES**
+
+The missing-price regression is now correct, the execution log accurately
+describes it, and every functional and compile verification passes. Approval is
+blocked only by the still-incomplete comment restoration required by the
+repository's documentation-preservation rule and the preceding re-review.
+
+### Remaining Process Finding — Accurate pre-existing comments are still deleted
+
+Commit `45cf8f4` restored the numbered race-path comments, but comparison with
+the pre-task version (`275fc5f^`) shows these still-accurate comments remain
+absent from [`scripts/test_all.ts`](../../../scripts/test_all.ts):
+
+- `// Temporarily redirect console.log to inspect output`
+- `// Initial OPEN`
+- `// Transition to HALTED`
+- `// Idempotent transition check (should return false and not add new audit logs)`
+- `// Reset/clean market`
+- The inline `// Equal to goal event TS` explanation
+- The inline `// Final Score 2-1` explanation
+
+Restore these comments exactly at their original logical statements. No
+production or test-behavior change is requested.
+
+After restoration, rerun `yarn test`, `yarn ts-node scripts/test_agent.ts`,
+`yarn typecheck`, `git diff --check`, and `git status --short`; update the
+execution log only if needed, then create a signed conventional follow-up
+commit and notify Codex.
+
+### Independent Final Re-review Evidence
+
+| Check | Result |
+|---|---|
+| Missing-price `expectThrow` | Passed; three required names paired with two prices |
+| Execution-log Test 14 | Accurate |
+| `yarn test` | Passed, exit `0` |
+| `yarn ts-node scripts/test_agent.ts` | Passed, exit `0`; no live validation branch executed |
+| `yarn typecheck` | Passed, exit `0` |
+| `git diff 0c0b4f3 45cf8f4 --check` | Passed, exit `0` |
+| Worktree status before review update | Clean |
+| Commit signing | SSH signature block is present; local trust verification remains unavailable |
+| On-chain activity | No transaction-producing command was run during final re-review |
