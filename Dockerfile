@@ -9,7 +9,10 @@ RUN yarn install --frozen-lockfile
 # Copy codebase
 COPY . .
 
+# Compile TypeScript to JavaScript
+RUN yarn build
+
 # Expose port 8080 for the Express server
 EXPOSE 8080
 
-CMD ["yarn", "start"]
+CMD ["node", "dist/scripts/start_agent.js"]
